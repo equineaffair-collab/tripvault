@@ -8,7 +8,8 @@ Derived from `tripvault-feature-plan.md` as of this date. This is a snapshot, no
 |---|---|---|
 | App framework | React Native + Expo (managed, dev build required — not Expo Go) | All features |
 | Backend | Supabase (Postgres, Auth, Storage, Edge Functions, pg_cron) | All features |
-| Document/booking extraction | Claude API (vision) | F1, F5 |
+| Document (MRZ) extraction | On-device OCR — `@react-native-ml-kit/text-recognition` + `mrz` for parsing and check-digit validation. No network, no per-scan cost, image never leaves the device | F1 |
+| Booking extraction | Claude API (vision + text) — unstructured confirmation formats, where a model genuinely earns its place | F5 |
 | Document scanning UX | `react-native-document-scanner-plugin` (wraps Apple VisionKit / Google ML Kit) | F1 |
 | Transactional + inbound email | Postmark or Mailgun, one vendor covering both jobs | F2, F5 |
 | Push notifications | Expo push notifications | F2 |

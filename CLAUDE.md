@@ -21,8 +21,9 @@ Manual/account setup you must do yourself: `docs/tripvault-setup-steps.md`.
 
 ## Stack
 React Native + Expo (dev build required, not Expo Go) · Supabase (Postgres,
-Auth, Storage, Edge Functions, pg_cron) · Claude API (vision) for document
-and booking extraction · react-native-document-scanner-plugin for capture ·
+Auth, Storage, Edge Functions, pg_cron) · on-device OCR (@react-native-ml-kit/
+text-recognition + the `mrz` package) for F1's MRZ extraction · Claude API for
+F5's booking extraction only · react-native-document-scanner-plugin for capture ·
 Postmark or Mailgun for email (both transactional and inbound parsing) ·
 Expo push notifications · RevenueCat for subscriptions · Stripe (separate
 from RevenueCat) for physical goods · Peecho for print fulfillment (future).
@@ -50,6 +51,10 @@ package with a native side, so the SDK-compatible version is chosen.
 - F3's "Check entry requirements" button is a soft integration point with
   F6, not a hard dependency — it must degrade to a plain "not available
   yet" message if F6 isn't built, never error or disappear.
+- Never send a passport or ID image off the device. F1's MRZ extraction is
+  on-device by design (see F1's design note in the feature plan) — do not
+  reintroduce a hosted vision call for it. The Claude API is for F5's booking
+  extraction only, where the input is unstructured booking text.
 
 ## Schema
 travelers (F11): id, user_id, name, relationship, is_minor,

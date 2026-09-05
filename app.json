@@ -36,6 +36,12 @@
         }
       ]
     ],
-    "scheme": "tripvault"
+    "scheme": "tripvault",
+    "owner": "blackbirdzz-property",
+    "extra": {
+      "eas": {
+        "projectId": "198e68de-c4f6-470b-a910-a64f25d70fc2"
+      }
+    }
   }
 }

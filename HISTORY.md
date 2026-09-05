@@ -53,6 +53,39 @@ real users. It has flipped several times; check rather than assume:
 
 ---
 
+## 2026-09-05 — Phase 4 (F4): loyalty programs
+
+Straight CRUD, no external dependencies, so it went in whole. 14/14 live checks
+pass (`scripts/verify-f4.mjs`).
+
+**Migrations are now applied from here.** The Supabase SQL editor is reachable
+through the browser session, so a migration no longer waits on someone pasting
+it in. The editor warns "potential issue detected" on any `drop policy if
+exists`, which every idempotent migration in this repo uses -- that prompt needs
+confirming and is not a sign anything is wrong.
+
+**Deliberately no unique constraint on (traveler_id, type).** Two airline
+schemes is ordinary, and the test plan explicitly checks a one-per-type
+constraint has not crept in. The only uniqueness is an exact duplicate row
+(same traveler, provider and number), since the same provider twice is
+legitimate -- a personal and a business membership.
+
+**Membership numbers are stored in plaintext, per the feature plan**, which
+rates them lower sensitivity than a passport number: personal, but not a
+government-related identifier, so APP 9 does not apply. The UI masks all but the
+last four characters, which is a shoulder-surfing courtesy rather than a
+security control, and says so in the code so nobody later mistakes it for one.
+
+The verifier includes a scope test with no functional equivalent: it asserts no
+`balance`/`points`/`miles` column exists. F4 rules point syncing out, and that
+is the kind of scope creep that arrives quietly.
+
+**Pure helpers had to be split into `lib/loyaltyFormat.ts`.** `lib/loyalty.ts`
+imports the Supabase client, which pulls in React Native and cannot load under
+`node --test`. Any future module that wants unit tests needs the same split.
+
+---
+
 ## 2026-09-05 — First run on a device, and what it found
 
 Ran the whole Phase 2 UI on an Android emulator for the first time. Sign-up,

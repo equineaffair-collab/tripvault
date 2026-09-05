@@ -18,6 +18,7 @@ import {
 } from '../lib/travelers';
 import { RELATIONSHIP_LABELS, type Relationship, type Traveler } from '../types/traveler';
 import TravelerFormModal from './TravelerFormModal';
+import LoyaltyScreen from './LoyaltyScreen';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
@@ -25,6 +26,9 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  // F4 lives one level down from a traveler rather than in its own tab: loyalty
+  // numbers belong to a person, and the tab bar is already at three.
+  const [loyaltyFor, setLoyaltyFor] = useState<Traveler | null>(null);
   const [editing, setEditing] = useState<Traveler | null>(null);
 
   const refresh = useCallback(async () => {
@@ -82,6 +86,10 @@ export default function ProfileScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Log out', style: 'destructive', onPress: () => void signOut() },
     ]);
+  }
+
+  if (loyaltyFor) {
+    return <LoyaltyScreen traveler={loyaltyFor} onBack={() => setLoyaltyFor(null)} />;
   }
 
   return (
@@ -150,6 +158,13 @@ export default function ProfileScreen() {
                 <Text style={styles.minorBadgeText}>Minor</Text>
               </View>
             )}
+            <Pressable
+              onPress={() => setLoyaltyFor(item)}
+              hitSlop={10}
+              style={styles.loyaltyLink}
+            >
+              <Text style={styles.loyaltyLinkText}>Loyalty ›</Text>
+            </Pressable>
           </Pressable>
         )}
         ListFooterComponent={
@@ -213,6 +228,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   minorBadgeText: { color: '#12448F', fontSize: 12, fontWeight: '600' },
+  loyaltyLink: { paddingLeft: 10, paddingVertical: 4 },
+  loyaltyLinkText: { color: '#1B6EF3', fontSize: 14, fontWeight: '600' },
   signOut: {
     marginTop: 32,
     borderWidth: 1,

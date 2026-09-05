@@ -28,7 +28,20 @@ export default function RootNavigator() {
   return (
     <NavigationContainer>
       {session ? (
-        <Tab.Navigator screenOptions={{ tabBarActiveTintColor: '#1B6EF3' }}>
+        <Tab.Navigator
+          screenOptions={{
+            tabBarActiveTintColor: '#1B6EF3',
+            // Label-only tabs. Without an explicit icon the navigator renders a
+            // placeholder glyph, which Android draws as an empty box. Real icons
+            // need @expo/vector-icons, which is not a dependency yet.
+            tabBarIcon: () => null,
+            tabBarLabelStyle: { fontSize: 13, fontWeight: '500' },
+            // No tabBarStyle override. The navigator already sizes the bar
+            // around the gesture inset; setting an explicit height replaces
+            // that calculation rather than adding to it, which pushed the
+            // labels underneath Android's gesture handle.
+          }}
+        >
           <Tab.Screen name="Documents" component={DocumentsScreen} />
           <Tab.Screen name="Trips" component={TripsScreen} />
           <Tab.Screen name="Profile" component={ProfileScreen} />

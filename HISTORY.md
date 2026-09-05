@@ -83,9 +83,16 @@ be opened without this screen ever losing focus. Only running the app finds this
 drift. Resolved by toggling `auto_time`; host and emulator now agree to within a
 second. Not an app bug, but worth recognising rather than chasing.
 
-**Cosmetic gaps, not yet fixed:** the tab bar has no icons (Android renders
-placeholder glyphs), and the "Add traveler" heading sits under the status bar
-because that screen has no safe-area padding.
+**Cosmetic gaps, since fixed:** the tab bar rendered placeholder glyphs because
+no `tabBarIcon` was supplied, and the "Add traveler" heading sat under the status
+bar. The modal now applies `useSafeAreaInsets` -- a full-screen RN `Modal` is
+outside the navigator, so it gets no header and no inset of its own. Tabs are
+label-only for now; real icons need `@expo/vector-icons`, not yet a dependency.
+
+Worth knowing for next time: setting `tabBarStyle: { height }` *replaces* the
+navigator's own safe-area calculation rather than adding to it, so an explicit
+height pushes the labels under Android's gesture handle. Adding `insets.bottom`
+by hand did not fix it either. Supplying no `tabBarStyle` at all is correct.
 
 ---
 

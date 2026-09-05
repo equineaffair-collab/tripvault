@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   impliesMinor,
   RELATIONSHIP_LABELS,
@@ -26,6 +27,10 @@ type Props = {
 };
 
 export default function TravelerFormModal({ visible, editing, onClose, onSubmit }: Props) {
+  // A full-screen Modal sits outside the navigator, so it gets no header and no
+  // safe-area inset of its own -- without this the title renders underneath the
+  // status bar clock.
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [relationship, setRelationship] = useState<Relationship>('self');
   const [busy, setBusy] = useState(false);
@@ -58,7 +63,13 @@ export default function TravelerFormModal({ visible, editing, onClose, onSubmit 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.title}>{editing ? 'Edit traveler' : 'Add traveler'}</Text>
 
         <Text style={styles.label}>Name</Text>

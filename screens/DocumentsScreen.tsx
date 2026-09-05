@@ -25,6 +25,7 @@ import {
 import { isScanningAvailable, scanDocument } from '../lib/scan';
 import type { MrzExtraction } from '../lib/mrz';
 import DocumentFormScreen from './DocumentFormScreen';
+import ExpiryBanner from '../components/ExpiryBanner';
 
 type Mode =
   | { kind: 'list' }
@@ -233,6 +234,14 @@ export default function DocumentsScreen() {
         ListHeaderComponent={
           <View style={styles.headerBlock}>
             <Text style={styles.heading}>Documents</Text>
+            <ExpiryBanner
+              documentNames={Object.fromEntries(
+                documents.map((d) => [
+                  d.id,
+                  `${nameFor(d.traveler_id)}'s ${DOCUMENT_TYPE_LABELS[d.type].toLowerCase()}`,
+                ])
+              )}
+            />
             {error && <Text style={styles.error}>{error}</Text>}
             {!isScanningAvailable() && (
               <View style={styles.notice}>

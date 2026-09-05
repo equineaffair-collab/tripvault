@@ -45,6 +45,22 @@ select
      left join public.travelers t on t.id = tt.traveler_id
     where t.id is null) as orphan_attendees_by_traveler,
 
+  -- reminders.ref_id has no foreign key on purpose -- ref_type keeps the table
+  -- generic so F8's payment reminders can reuse it. Integrity is kept by a
+  -- trigger instead (0007), so this is the check that the trigger is doing its
+  -- job. A second ref_type needs its own trigger AND its own line here.
+  (select count(*) from public.reminders r
+     left join public.documents d on d.id = r.ref_id
+    where r.ref_type = 'document' and d.id is null) as orphan_reminders,
+
+  (select count(*) from public.reminders r
+     left join auth.users u on u.id = r.user_id
+    where u.id is null) as orphan_reminders_by_user,
+
+  (select count(*) from public.notification_preferences n
+     left join auth.users u on u.id = n.user_id
+    where u.id is null) as orphan_notification_prefs,
+
   -- Expected to be non-zero after any account deletion. See the note above.
   (select count(*) from public.document_access_log
     where actor_user_id is null) as log_rows_kept_after_delete;

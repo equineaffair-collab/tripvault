@@ -11,6 +11,8 @@
   },
   "exclude": [
     "supabase/functions/documents/**",
-    "supabase/functions/account/**"
+    "supabase/functions/account/**",
+    "supabase/functions/reminder-sweep/**",
+    "supabase/functions/_shared/email.ts"
   ]
 }

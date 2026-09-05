@@ -5,6 +5,9 @@
  * Kept free of runtime imports so `node --test` can load it. Data access lives
  * in lib/trips.ts, which imports the Supabase client and therefore cannot.
  */
+import { addMonths } from '../supabase/functions/_shared/dates.ts';
+
+export { addMonths };
 
 export const CHECKLIST_CATEGORIES = [
   'documents',
@@ -111,28 +114,6 @@ export function checklistProgress(items: readonly ChecklistItem[]): {
 // ---------------------------------------------------------------------------
 // Passport validity — F3's automatic check on save
 // ---------------------------------------------------------------------------
-
-/**
- * Add whole months to an ISO date, clamping to the end of the target month.
- *
- * Naive date arithmetic gets this wrong: 31 August plus six months is not
- * 3 March. JavaScript's Date rolls the overflow forward, so the clamp has to be
- * explicit or the rule silently reports the wrong deadline for month-end dates.
- */
-export function addMonths(isoDate: string, months: number): string {
-  const [y, m, d] = isoDate.split('-').map(Number);
-  if (!y || !m || !d) throw new Error(`Not an ISO date: ${isoDate}`);
-
-  const targetMonthIndex = m - 1 + months;
-  const targetYear = y + Math.floor(targetMonthIndex / 12);
-  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
-
-  // Day 0 of the following month is the last day of the target month.
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-  const day = Math.min(d, lastDay);
-
-  return `${String(targetYear).padStart(4, '0')}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
 
 export const DEFAULT_VALIDITY_MONTHS = 6;
 

@@ -53,6 +53,54 @@ real users. It has flipped several times; check rather than assume:
 
 ---
 
+## 2026-09-05 — Phase 3 (F2): expiry reminders
+
+22/22 live checks (`scripts/verify-f2.mjs`) and 27 unit tests. The sweep accepts
+a pinned `today`, which is what makes this testable at all — the verifier walks
+one passport through all three milestones by moving the date, rather than
+waiting six months for a real trigger.
+
+**Only the most urgent milestone fires.** Adding a passport that already expires
+next month means all three trigger dates have passed. Sending six-month,
+three-month and one-month notices in the same sweep would be three emails saying
+increasingly urgent versions of the same thing, so the overtaken ones are
+recorded as `superseded` and never fire late.
+
+**Email is un-disableable structurally, not by convention.** There is no
+`email_enabled` column to set — the verifier asserts the write fails with
+PGRST204. A flag we agreed to ignore would be one refactor away from being
+honoured; a missing column cannot be. Push has a real toggle beside it.
+
+**A reminder row is written before delivery is attempted, and `sent` stays false
+until it succeeds.** Email is not configured yet, so every reminder is currently
+recorded as owed but unsent. That is deliberate: when a provider is finally
+configured the backlog goes out, rather than everything that came due in the
+meantime having been silently marked delivered.
+
+**Bug the verifier caught, in my own design.** `reminders.ref_id` has no foreign
+key, because `ref_type` keeps the table generic so F8's payment reminders can
+reuse it. That genericity cost referential integrity — deleting a document left
+its reminders orphaned. Fixed with a trigger (0007) rather than by giving up the
+generic shape, and `scripts/audit-orphans.sql` grew a check for it. **A second
+ref_type will need its own trigger and its own line in that audit.**
+
+**Checkpoint — needs you:**
+- **A Postmark or Mailgun account, and a domain.** Until then no reminder is
+  actually delivered. `supabase/functions/_shared/email.ts` is written against
+  both; set `EMAIL_PROVIDER`, `EMAIL_FROM` and the provider's credentials as
+  function secrets and delivery starts working with no code change.
+- **`0006_reminder_cron.sql` is written but NOT applied.** It needs the sweep
+  secret placed in Supabase Vault, which cannot go in a committed file. Steps are
+  in the migration. Until it runs, the sweep only fires when invoked by hand.
+- **Push needs `expo-notifications`** to register a device token. The column and
+  the send path exist; the sweep delivers the moment a token is stored.
+
+The sweep secret is set as a function secret and stashed in `scripts/.sweep-secret`
+(gitignored) so the verifier can run. Low value — worst case someone triggers an
+idempotent sweep — but rotate it if it ever leaks.
+
+---
+
 ## 2026-09-05 — Phase 7 (F12): data export and account deletion
 
 28/28 live checks pass (`scripts/verify-f12.mjs`). The feature plan calls this

@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { getNotificationPreferences, setPushEnabled } from '../lib/reminders';
 import {
   ReauthenticationRequired,
   deleteAccount,
@@ -32,6 +33,13 @@ export default function AccountScreen({ onBack }: { onBack: () => void }) {
   const [password, setPassword] = useState('');
   const [needsReauth, setNeedsReauth] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [pushOn, setPushOn] = useState(true);
+
+  React.useEffect(() => {
+    getNotificationPreferences()
+      .then((p) => setPushOn(p?.push_enabled ?? true))
+      .catch(() => undefined);
+  }, []);
 
   async function runExport() {
     setBusy('export');
@@ -170,6 +178,52 @@ export default function AccountScreen({ onBack }: { onBack: () => void }) {
         )}
       </View>
 
+      {/* ---- Notifications (F2) ---- */}
+      <View style={styles.block}>
+        <Text style={styles.blockTitle}>Expiry reminders</Text>
+        <Text style={styles.body}>
+          TripVault warns you six months, three months and one month before a document expires.
+        </Text>
+
+        <Pressable
+          style={styles.toggleRow}
+          onPress={async () => {
+            const next = !pushOn;
+            setPushOn(next);
+            try {
+              await setPushEnabled(next);
+            } catch (e) {
+              setPushOn(!next);
+              Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
+            }
+          }}
+        >
+          <View style={[styles.checkbox, pushOn && styles.checkboxOn]}>
+            {pushOn && <Text style={styles.tick}>✓</Text>}
+          </View>
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleLabel}>Push notifications</Text>
+            <Text style={styles.hint}>
+              A convenience layer on top of email. Turning this off is fine.
+            </Text>
+          </View>
+        </Pressable>
+
+        <View style={styles.lockedRow}>
+          <View style={[styles.checkbox, styles.checkboxLocked]}>
+            <Text style={styles.tick}>✓</Text>
+          </View>
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleLabel}>Email reminders — always on</Text>
+            <Text style={styles.hint}>
+              Email can't be switched off. It's the channel that survives a lost phone or a
+              declined notification permission, and silencing everything would mean TripVault
+              quietly stops doing the one thing it's for.
+            </Text>
+          </View>
+        </View>
+      </View>
+
       {/* ---- Deletion ---- */}
       <View style={[styles.block, styles.dangerBlock]}>
         <Text style={styles.blockTitleDanger}>Delete my account</Text>
@@ -273,4 +327,12 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.45 },
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  toggleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 4 },
+  lockedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 4, opacity: 0.85 },
+  checkbox: { width: 24, height: 24, borderRadius: 5, borderWidth: 1, borderColor: '#9A9A9A', alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  checkboxOn: { backgroundColor: '#1B6EF3', borderColor: '#1B6EF3' },
+  checkboxLocked: { backgroundColor: '#9A9A9A', borderColor: '#9A9A9A' },
+  tick: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  toggleText: { flex: 1, gap: 2 },
+  toggleLabel: { fontSize: 15, fontWeight: '500' },
 });

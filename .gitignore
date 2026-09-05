@@ -47,3 +47,7 @@ yarn-error.*
 build-artifacts/
 *.apk
 *.aab
+
+# The reminder sweep secret, for scripts/verify-f2.mjs. Machine credential,
+# never committed.
+scripts/.sweep-secret

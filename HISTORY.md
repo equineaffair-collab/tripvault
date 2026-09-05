@@ -48,14 +48,25 @@ below and `docs/tripvault-setup-steps.md`.
 Build finished in ~10 minutes. APK is 230 MB (dev client plus every native
 module). EAS project owned by `blackbirdzz-property`.
 
-**The first submitted build was cancelled, and the reason generalises.** EAS
-archives the project with git, so a gitignored `.env` never reaches the builder,
-and `EXPO_PUBLIC_` values are inlined at build time. That APK would have
-installed and then been unusable — no Supabase URL or key, straight to the "not
-configured" notice with no way to log in. The CLI says so only in passing ("No
-environment variables ... found for the development environment"), which is easy
-to read past. Both values are now EAS project environment variables across
-development, preview and production.
+**EAS environment variables, and a correction.** EAS archives the project with
+git, so a gitignored `.env` never reaches the builder, and `EXPO_PUBLIC_` values
+are inlined at bundle time. On noticing the CLI's passing note ("No environment
+variables ... found for the development environment") the first build was
+cancelled on the assumption the APK would be unusable.
+
+That assumption was wrong for a *development* build, and inspecting the APK
+afterwards proved it: there is no `index.android.bundle` inside it. A dev build
+ships no embedded JS — it loads from the Metro dev server at runtime, and Metro
+inlines `EXPO_PUBLIC_` values from the **local** `.env`. The cancelled build
+would have worked. The cancellation cost ten minutes and nothing else.
+
+The variables are still right to have set, for the real reason: `preview` and
+`production` builds *do* embed the bundle, and those would genuinely have
+shipped with no credentials. Both are now EAS project environment variables
+across all three environments.
+
+The rule worth carrying: **development builds read the local `.env`; embedded
+builds read EAS environment variables.**
 
 They are set **plaintext, not secret**, deliberately: both are publishable by
 design and extractable from any APK regardless, so marking them secret would

@@ -18,14 +18,23 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.tripvault.app"
+      "package": "com.tripvault.app",
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store",
-      "react-native-document-scanner-plugin"
+      "expo-dev-client",
+      [
+        "react-native-document-scanner-plugin",
+        {
+          "cameraPermission": "TripVault uses the camera to scan your passport or ID. The scan is read on your device and never sent anywhere for processing."
+        }
+      ]
     ],
     "scheme": "tripvault"
   }

@@ -8,5 +8,8 @@
       "node",
       "react"
     ]
-  }
+  },
+  "exclude": [
+    "supabase/functions/documents/**"
+  ]
 }

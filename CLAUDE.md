@@ -59,8 +59,18 @@ package with a native side, so the SDK-compatible version is chosen.
 ## Schema
 travelers (F11): id, user_id, name, relationship, is_minor,
   linked_auth_user_id (nullable, F9), created_at
-documents (F1): id, traveler_id, type, country, document_number (encrypted),
-  issue_date, expiry_date, is_primary, file_url, created_at
+documents (F1): id, traveler_id, type, country, document_number_encrypted,
+  issue_date, expiry_date, is_primary, file_path, created_at
+  - document_number_encrypted, not document_number: named for what it holds so
+    plaintext cannot land there by accident, and CHECK-constrained to the
+    envelope shape so it cannot land there on purpose either.
+  - file_path, not file_url: an object path in the private `documents` bucket.
+    Storing a URL would imply a durable link; access is by short-lived signed
+    URL generated per request.
+travelers.guardian_acknowledged_at (F1): nullable timestamptz, set by the Edge
+  Function when a minor profile's parent/guardian gate is confirmed
+document_access_log (F1): id, document_id, actor_user_id, action, succeeded,
+  created_at -- append-only from outside; the owner may read their own rows
 trips (F3): id, user_id, name, destination, start_date, end_date,
   traveling_on_document_id (nullable)
 trip_travelers (F3): trip_id, traveler_id
@@ -84,6 +94,13 @@ photos (F10, future): id, trip_id, trip_item_id (nullable), file_url,
 - Keep extraction prompts (document and booking parsing) in `/lib/prompts/`
   as their own files, not inline in components.
 - Encrypt sensitive fields before writing to Supabase, never in plaintext.
+  For F1's document_number this is concrete: the key lives ONLY in the
+  `documents` Edge Function's DOCUMENT_ENCRYPTION_KEY secret. Never put it in
+  the app bundle, in .env, or in the database -- key/data separation is the
+  whole reason a database compromise yields ciphertext, and is what GDPR Art
+  34(3)(a) and Australia's NDB scheme actually turn on. `documents` has no
+  INSERT or UPDATE policy for authenticated users by design: writes go through
+  the Edge Function. Do not add one.
 - Write a short test for every Edge Function that touches money, reminder
   scheduling, or account deletion.
 - Ask before adding a new third-party dependency.

@@ -33,8 +33,8 @@ const check = (label, ok, detail = '') => {
 };
 
 const stamp = Date.now();
-const userA = { email: `tv-a-${stamp}@example.com`, password: 'Test-passw0rd!A' };
-const userB = { email: `tv-b-${stamp}@example.com`, password: 'Test-passw0rd!B' };
+const userA = { email: `tv-a-${stamp}@tripvault.local`, password: 'Test-passw0rd!A' };
+const userB = { email: `tv-b-${stamp}@tripvault.local`, password: 'Test-passw0rd!B' };
 
 async function signUpAndIn(c, creds) {
   const { error: upErr } = await c.auth.signUp(creds);

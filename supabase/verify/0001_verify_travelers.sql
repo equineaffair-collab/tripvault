@@ -48,7 +48,20 @@ begin
     raise exception 'FAIL: after update to child, is_minor = %, expected true', got_minor;
   end if;
 
-  -- 4. The relationship CHECK constraint must reject anything off-list.
+  -- 4. Updating ONLY is_minor must not be able to forge it. This is the case
+  --    a column-scoped `update of relationship` trigger misses entirely: the
+  --    trigger never fires, so the client's value sticks. RLS allows this write
+  --    on the user's own row, so it is reachable by any direct API call.
+  update public.travelers
+     set is_minor = false
+   where name = 'Trigger probe - child' and user_id = test_user
+  returning is_minor into got_minor;
+
+  if got_minor is not true then
+    raise exception 'FAIL: is_minor was forged to % by a direct update, expected true', got_minor;
+  end if;
+
+  -- 5. The relationship CHECK constraint must reject anything off-list.
   begin
     insert into public.travelers (user_id, name, relationship)
     values (test_user, 'Trigger probe - bad', 'grandparent');

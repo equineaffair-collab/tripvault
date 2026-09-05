@@ -38,6 +38,12 @@ create unique index if not exists travelers_linked_auth_user_id_key
 -- it, a direct API call could create a "child" profile with is_minor = false
 -- and walk straight past that gate. Deriving it in a trigger means the flag
 -- follows from relationship no matter what route the write arrives by.
+--
+-- The trigger fires on every UPDATE, not just `UPDATE OF relationship`. A
+-- column-scoped trigger only fires when that column appears in the SET list,
+-- so `update travelers set is_minor = false` would slip past it untouched --
+-- and RLS permits exactly that write on the user's own row. Firing on all
+-- updates recomputes the flag whatever the client sends.
 -- ---------------------------------------------------------------------------
 create or replace function public.set_traveler_is_minor()
 returns trigger
@@ -51,7 +57,7 @@ $$;
 
 drop trigger if exists travelers_set_is_minor on public.travelers;
 create trigger travelers_set_is_minor
-  before insert or update of relationship on public.travelers
+  before insert or update on public.travelers
   for each row execute function public.set_traveler_is_minor();
 
 -- ---------------------------------------------------------------------------

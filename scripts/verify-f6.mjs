@@ -178,6 +178,24 @@ console.log('\nMulti-passport comparison against a real rule');
   await a.from('travelers').delete().eq('id', trav.id);
 }
 
+console.log('\nDestination can be given as a code OR a name');
+{
+  // The field is free text labelled "Destination". People type "Thailand",
+  // not "THA", and refusing that would make the check look broken for the
+  // most obvious input.
+  const { data: byCode } = await a
+    .from('entry_requirements').select('country').eq('country', 'THA').maybeSingle();
+  check('an ICAO code resolves', byCode?.country === 'THA', String(byCode?.country));
+
+  const { data: byName } = await a
+    .from('entry_requirements').select('country').ilike('country_name', 'thailand').maybeSingle();
+  check('a country name resolves, case-insensitively', byName?.country === 'THA', String(byName?.country));
+
+  const { data: mixed } = await a
+    .from('entry_requirements').select('country').ilike('country_name', 'United Kingdom').maybeSingle();
+  check('a multi-word name resolves', mixed?.country === 'GBR', String(mixed?.country));
+}
+
 console.log('\nUnknown destinations');
 {
   const { data } = await a

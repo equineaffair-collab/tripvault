@@ -53,6 +53,42 @@ real users. It has flipped several times; check rather than assume:
 
 ---
 
+## 2026-09-05 — Running Phases 4-8 on the emulator
+
+First execution of the Trips, Loyalty and Account screens. Most of it worked
+first time, and the parts that did not were only findable by running it.
+
+**Confirmed working end to end:** creating a trip with two attendees; the
+passport check firing automatically on save and generating checklist items;
+those auto items pinned above the routine ones with the amber treatment exactly
+as F3 specifies; the "0 of 7 done" progress line; the F6 button looking up
+Thailand and showing the *unverified* wording ("treat it as a prompt to check
+rather than an answer"); the Loyalty screen; and the Profile screen's new entry
+points. The tier gate also confirmed itself in passing — Janette and Sam both
+still appear and are selectable, because they were created before the gate and
+it only refuses new inserts.
+
+**Two fixes the run exposed:**
+
+1. **The destination field only matched ICAO codes.** It is free text labelled
+   "Destination" — people type "Thailand", not "THA". Refusing the obvious input
+   made the whole check look broken. Now matches a code first, then the country
+   name case-insensitively, with verifier cases for both plus a multi-word name.
+
+2. **F6 duplicated F3's checklist item.** For a traveler with no passport, F3
+   already adds "Add X's passport to TripVault"; F6 was adding "Sort out X's
+   passport for Thailand" beside it. Two items saying the same thing is how a
+   checklist stops being read. F6 now only adds an item for a genuine validity
+   failure, leaving the no-passport case to F3.
+
+**Emulator quirk, now seen twice:** after a crash or restart the emulator's
+clock drifts and Supabase rejects the token with "JWT issued at future". It
+looks like an auth bug and is not one. Fix:
+`adb shell settings put global auto_time 0` then `1`, wait a few seconds, and
+restart the app.
+
+---
+
 ## 2026-09-05 — Phase 6 (F8): subscription tiers
 
 17/17 live checks (`scripts/verify-f8.mjs`) and 27 unit tests holding the code

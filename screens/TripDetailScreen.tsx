@@ -149,7 +149,12 @@ export default function TripDetailScreen({
 
       // F3: anything flagged becomes a checklist item, so it is not just an
       // alert the user dismisses and forgets.
-      const failing = results.filter((r) => r.problem || r.check?.anyClears === false);
+      //
+      // Only genuine validity failures, though. A traveler with no passport at
+      // all is already covered by F3's own auto item ("Add X's passport"), and
+      // adding "Sort out X's passport for Thailand" beside it is two items
+      // saying the same thing -- which is how a checklist stops being read.
+      const failing = results.filter((r) => !r.problem && r.check?.anyClears === false);
       for (const r of failing) {
         await addChecklistItem(
           trip.id,

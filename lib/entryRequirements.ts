@@ -78,14 +78,33 @@ export async function lookupEntryRequirement(
     throw new Error(ENTRY_REQUIREMENTS_UNAVAILABLE_MESSAGE);
   }
 
-  const { data, error } = await supabase
+  const term = country.trim();
+  if (!term) return null;
+
+  const COLUMNS =
+    'country, country_name, min_passport_validity_months, counted_from, verified, last_verified, notes';
+
+  // An ICAO code first, since it is unambiguous.
+  const { data: byCode, error } = await supabase
     .from('entry_requirements')
-    .select('country, country_name, min_passport_validity_months, counted_from, verified, last_verified, notes')
-    .eq('country', country.trim().toUpperCase())
+    .select(COLUMNS)
+    .eq('country', term.toUpperCase())
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data ? toRequirement(data as Record<string, unknown>) : null;
+  if (byCode) return toRequirement(byCode as Record<string, unknown>);
+
+  // Then by name. The destination field is free text labelled "Destination" --
+  // people type "Thailand", not "THA", and refusing to match that would make
+  // the whole check look broken for the most obvious input.
+  const { data: byName, error: nameError } = await supabase
+    .from('entry_requirements')
+    .select(COLUMNS)
+    .ilike('country_name', term)
+    .maybeSingle();
+
+  if (nameError) throw new Error(nameError.message);
+  return byName ? toRequirement(byName as Record<string, unknown>) : null;
 }
 
 /** Every destination the reference list covers, for a picker. */

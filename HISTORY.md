@@ -53,6 +53,59 @@ real users. It has flipped several times; check rather than assume:
 
 ---
 
+## 2026-09-05 — Phase 6 (F8): subscription tiers
+
+17/17 live checks (`scripts/verify-f8.mjs`) and 27 unit tests holding the code
+to the feature plan's tier table. RevenueCat is not connected; everything else
+is.
+
+**Gating is enforced by the database, not the interface.** The test plan asks
+for each gated action to be tried by direct API call on a Free account, so the
+limits are Postgres triggers and `verify-f8.mjs` goes straight to PostgREST with
+no app code involved. Nothing the UI does can make those tests pass.
+
+**The tier is not client-writable.** `subscriptions` has no INSERT or UPDATE
+policy for authenticated users; writes come from the service role, which is what
+a RevenueCat webhook presents. An app that could set its own tier would make
+every other check decorative, and the verifier tries exactly that attack.
+
+**The limits exist in two places, so they are checked against each other.**
+`lib/tiers.ts` and the SQL functions both encode them, and the verifier asserts
+they agree. A silent drift would mean the app and the database disagree about
+what a customer paid for.
+
+**Lifetime gets Pro's scope, not Family's** — one traveler profile, unlimited
+trips. Asserted in both the unit tests and against the database, because a
+Lifetime buyer quietly receiving six profiles is a pricing bug, not a generous
+rounding.
+
+**Bug the verifier caught in my own trigger.** The active-trip limit counted
+existing active trips but ignored whether the NEW trip was active — so a Free
+user with one upcoming trip could not record a holiday they had already taken.
+That is not what "1 active trip" means, and it is an irritating way to meet a
+paywall. A finished trip now consumes no slot.
+
+**Downgrading destroys nothing.** The triggers refuse new inserts only, so a
+lapsed Family plan keeps its four profiles. The ToS brief asks that this be
+stated rather than left to chance.
+
+**Consequence worth knowing: two verifiers now need elevation.** `verify-f1` and
+`verify-f3` need more than one traveler profile, which Free correctly forbids.
+They exit with a clear message instead of crashing, and run in full once the
+service role key is placed in `scripts/.service-key` (gitignored).
+`scripts/_tier.mjs` grants a test account a tier when that key is present.
+
+A tier-granting endpoint guarded by a shared secret would have been easier and
+was deliberately not built: shipping a backdoor to production for the
+convenience of a test suite is a bad trade.
+
+**Checkpoint — needs you:** RevenueCat products, and the service role key if you
+want F1 and F3 verified end to end again. `stubEntitlementProvider` in
+`lib/subscription.ts` is the seam RevenueCat fills; nothing that consumes a tier
+needs to know where it came from.
+
+---
+
 ## 2026-09-05 — Phase 8 (F6): passport validity checker
 
 15/15 live checks (`scripts/verify-f6.mjs`), 19 unit tests, and F3's verifier

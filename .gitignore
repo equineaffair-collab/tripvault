@@ -51,3 +51,7 @@ build-artifacts/
 # The reminder sweep secret, for scripts/verify-f2.mjs. Machine credential,
 # never committed.
 scripts/.sweep-secret
+
+# Supabase service role key, used only by the verifier scripts to grant a test
+# account a paid tier. Never committed.
+scripts/.service-key

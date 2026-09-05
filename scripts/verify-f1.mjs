@@ -10,6 +10,7 @@
  * can sign its two throwaway users straight in. Turn it back on afterwards.
  */
 import { createClient } from '@supabase/supabase-js';
+import { grantTier, hasServiceKey } from './_tier.mjs';
 import { readFileSync } from 'node:fs';
 
 const env = Object.fromEntries(
@@ -80,6 +81,18 @@ const mk = async (c, user, name, relationship) => {
   if (error) throw new Error(`could not create traveler: ${error.message}`);
   return data;
 };
+
+// F1 needs an adult and a minor profile on the same account, which is two
+// profiles -- more than Free allows since Phase 6. Grant the test account
+// Family so the guardian-gate checks can run at all.
+await grantTier(URL_, aUser.id, 'family');
+if (!hasServiceKey) {
+  console.error('');
+  console.error('  This verifier needs an adult and a minor profile, which a Free account cannot have.');
+  console.error('  Put the service role key in scripts/.service-key and re-run.');
+  console.error('');
+  process.exit(2);
+}
 
 const adult = await mk(a, aUser, `F1 adult ${stamp}`, 'self');
 const child = await mk(a, aUser, `F1 child ${stamp}`, 'child');

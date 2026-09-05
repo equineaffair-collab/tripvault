@@ -12,6 +12,17 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { getNotificationPreferences, setPushEnabled } from '../lib/reminders';
 import {
+  FEATURE_LABELS,
+  GATED_FEATURES,
+  TIER_LABELS,
+  TIER_LIMITS,
+  TIER_PRICING,
+  currentEntitlementProvider,
+  getAccountUsage,
+  hasFeature,
+  type AccountUsage,
+} from '../lib/subscription';
+import {
   ReauthenticationRequired,
   deleteAccount,
   describeExport,
@@ -34,6 +45,13 @@ export default function AccountScreen({ onBack }: { onBack: () => void }) {
   const [needsReauth, setNeedsReauth] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [pushOn, setPushOn] = useState(true);
+  const [usage, setUsage] = useState<AccountUsage | null>(null);
+
+  React.useEffect(() => {
+    getAccountUsage()
+      .then(setUsage)
+      .catch(() => undefined);
+  }, []);
 
   React.useEffect(() => {
     getNotificationPreferences()
@@ -177,6 +195,36 @@ export default function AccountScreen({ onBack }: { onBack: () => void }) {
           </View>
         )}
       </View>
+
+      {/* ---- Plan (F8) ---- */}
+      {usage && (
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Your plan: {TIER_LABELS[usage.tier]}</Text>
+          <Text style={styles.body}>{TIER_PRICING[usage.tier]}</Text>
+
+          <Text style={styles.usageLine}>
+            Traveler profiles: {usage.travelers} of {TIER_LIMITS[usage.tier].travelerProfiles}
+          </Text>
+          <Text style={styles.usageLine}>
+            Active trips: {usage.activeTrips} of{' '}
+            {TIER_LIMITS[usage.tier].activeTrips ?? 'unlimited'}
+          </Text>
+
+          {GATED_FEATURES.map((f) => (
+            <Text key={f} style={styles.usageLine}>
+              {hasFeature(usage.tier, f) ? '✓' : '·'} {FEATURE_LABELS[f]}
+              {hasFeature(usage.tier, f) ? '' : ' — not on this plan'}
+            </Text>
+          ))}
+
+          {!currentEntitlementProvider().canPurchase && (
+            <Text style={styles.hint}>
+              Upgrading isn't available yet — RevenueCat isn't connected, so there's no way to
+              buy a plan from inside the app. The limits above are already enforced.
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* ---- Notifications (F2) ---- */}
       <View style={styles.block}>
@@ -335,4 +383,5 @@ const styles = StyleSheet.create({
   tick: { color: '#fff', fontSize: 15, fontWeight: '700' },
   toggleText: { flex: 1, gap: 2 },
   toggleLabel: { fontSize: 15, fontWeight: '500' },
+  usageLine: { fontSize: 14, color: '#444', lineHeight: 21 },
 });

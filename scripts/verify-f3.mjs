@@ -11,6 +11,7 @@
  * Requires "Confirm email" to be OFF in Supabase Auth settings.
  */
 import { createClient } from '@supabase/supabase-js';
+import { grantTier, hasServiceKey } from './_tier.mjs';
 import { readFileSync } from 'node:fs';
 
 const env = Object.fromEntries(
@@ -72,6 +73,18 @@ const mkTraveler = async (c, user, name, relationship = 'self') => {
   if (error) throw new Error(`traveler: ${error.message}`);
   return data.id;
 };
+
+// Multiple attendees is a Family-tier behaviour by design, and F3's whole
+// checklist story assumes more than one traveler. Grant the test account
+// Family so the attendee checks are meaningful.
+await grantTier(env.EXPO_PUBLIC_SUPABASE_URL, aUser.id, 'family');
+if (!hasServiceKey) {
+  console.error('');
+  console.error('  This verifier needs multiple traveler profiles, which a Free account cannot have.');
+  console.error('  Put the service role key in scripts/.service-key and re-run.');
+  console.error('');
+  process.exit(2);
+}
 
 const aTrav = await mkTraveler(a, aUser, `F3 adult ${stamp}`);
 const aTrav2 = await mkTraveler(a, aUser, `F3 partner ${stamp}`, 'partner');

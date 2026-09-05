@@ -4,15 +4,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../contexts/AuthContext';
 import AuthScreen from '../screens/AuthScreen';
-import PlaceholderScreen from '../screens/PlaceholderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
+import TripsScreen from '../screens/TripsScreen';
 
 const Tab = createBottomTabNavigator();
-
-function TripsScreen() {
-  return <PlaceholderScreen title="Trips" comingIn="Phase 5 (F3 — trip folder)" />;
-}
 
 export default function RootNavigator() {
   const { session, initializing } = useAuth();

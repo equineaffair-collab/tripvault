@@ -53,6 +53,52 @@ real users. It has flipped several times; check rather than assume:
 
 ---
 
+## 2026-09-05 — Phase 5 (F3): trips, attendees, checklist and bookings
+
+The biggest core feature, and fully unblocked. 26/26 live checks pass
+(`scripts/verify-f3.mjs`), plus 30 unit tests on the logic that carries
+consequence.
+
+**The six-month passport rule is the part worth getting right.** Naive month
+arithmetic gets it wrong: 31 August plus six months is not 3 March, because
+JavaScript's Date rolls the overflow forward. `addMonths` clamps to the end of
+the target month, and the tests pin both that and the leap-year case.
+
+Design decisions inside the rule:
+- A dual national passes if ANY passport clears, and only the best one is
+  reported. Nagging someone about the passport they were never going to use is
+  noise, and F6 later recommends which to travel on.
+- "Expires before the trip ends" is reported separately from "falls short of the
+  six-month buffer". They are materially different problems and the wording
+  differs.
+- A passport with no expiry recorded is reported rather than silently passing,
+  which is the failure mode that would matter most.
+
+**Auto-generated checklist items are upserted, not appended.** A unique index on
+(trip_id, source, label) where source is not manual means re-running the check on
+every open updates rather than duplicating, and resolved issues have their items
+removed so a fixed problem stops nagging. Manual items are exempt from that index
+on purpose — two "call the hotel" reminders is the user's business.
+
+**Deleting a booking clears a checklist link but keeps the item** (ON DELETE SET
+NULL, verified). The opposite would quietly erase the task along with the
+booking.
+
+**The F6 seam is a real runtime probe, not a flag.** `isEntryRequirementCheckAvailable`
+asks whether F6's `entry_requirements` table exists. So the fallback is genuinely
+the live path today — the verifier asserts the table is still absent — and the
+button starts working the moment Phase 8's migration lands, with no code change
+and no flag anyone can forget to flip.
+
+`trip_items.trip_id` is nullable from the start for F5's "Needs a trip" holding
+area, with `user_id` alongside it so an unassigned item still has an owner for
+RLS to scope. Retrofitting that onto a table holding real bookings would have
+been worse.
+
+Removed `screens/PlaceholderScreen.tsx`: both tabs that used it are now real.
+
+---
+
 ## 2026-09-05 — Phase 4 (F4): loyalty programs
 
 Straight CRUD, no external dependencies, so it went in whole. 14/14 live checks

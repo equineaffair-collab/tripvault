@@ -23,10 +23,13 @@ unproven. Read the Current state section first.
   executed on a device. The likeliest breakage is ML Kit's OCR result shape,
   handled defensively across three possible forms but never against real output.
 
-**Blocked on:**
-- **EAS dev build** — configured and committed; needs `eas-cli login`, which is
-  interactive. Without it the scanner and OCR cannot run at all. Android is the
-  target (Windows machine; iOS device builds need a paid Apple account).
+**Dev build:** exists. Android development APK built 2026-09-05, downloaded to
+`build-artifacts/` (gitignored). EAS project is
+`@blackbirdzz-property/tripvault`. Install it, then `expo start --dev-client`.
+
+**In progress:** Android Studio + emulator, so the UI can be exercised without a
+physical device. Note the emulator cannot meaningfully test the scanner — see
+the entry below.
 
 **Not started:** Phases 3–10. Phase 8 (F6) is additionally blocked on
 `tripvault-entry-requirements-starter.md`, which does not exist — the setup doc
@@ -37,6 +40,43 @@ flags those IATA lookups as manual research.
 
 **Owed:** email confirmation is OFF on the Supabase project. See 2026-09-05
 below and `docs/tripvault-setup-steps.md`.
+
+---
+
+## 2026-09-05 — First Android dev build, and an EAS environment trap
+
+Build finished in ~10 minutes. APK is 230 MB (dev client plus every native
+module). EAS project owned by `blackbirdzz-property`.
+
+**The first submitted build was cancelled, and the reason generalises.** EAS
+archives the project with git, so a gitignored `.env` never reaches the builder,
+and `EXPO_PUBLIC_` values are inlined at build time. That APK would have
+installed and then been unusable — no Supabase URL or key, straight to the "not
+configured" notice with no way to log in. The CLI says so only in passing ("No
+environment variables ... found for the development environment"), which is easy
+to read past. Both values are now EAS project environment variables across
+development, preview and production.
+
+They are set **plaintext, not secret**, deliberately: both are publishable by
+design and extractable from any APK regardless, so marking them secret would
+imply a protection that does not exist. The service role key and
+DOCUMENT_ENCRYPTION_KEY must never be added here — an `EXPO_PUBLIC_` value is
+compiled into the app.
+
+**The Android keystore was generated in the cloud** (no local keytool). It is now
+this app's signing identity; losing it means being unable to ship Play updates.
+It lives in the Expo account, retrievable via `eas credentials`.
+
+**Emulator limitation, worth not rediscovering:** an Android emulator cannot
+meaningfully test the passport scanner. The camera is either a synthetic scene or
+webcam passthrough, so scanning means holding a passport up to a laptop webcam
+and hoping edge detection copes. Everything else in Phase 2 tests fine there —
+auth, profiles, manual entry, the guardian gate, tap-to-reveal. The scan path
+needs a real phone.
+
+Also: the AVD must use a **Google Play** system image, not AOSP. ML Kit's
+document scanner depends on Google Play Services, so on an AOSP image it fails
+to initialise in a way that looks like our bug but is not.
 
 ---
 

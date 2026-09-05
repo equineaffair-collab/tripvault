@@ -12,24 +12,31 @@ unproven. Read the Current state section first.
 
 **Built and verified against the live Supabase project:**
 - **Phase 0** — Expo SDK 57 / RN 0.86 / TypeScript strict. Email+password auth,
-  three-tab shell. Session persists to the device keychain.
+  three-tab shell.
 - **Phase 1 (F11)** — traveler profiles. 19/19 live checks pass.
 - **Phase 2 (F1)** — document vault storage, encryption, Edge Function, guardian
   gate, audit log. 23/23 live checks pass.
 
-**Built but never run:**
-- **Phase 2's UI** — scanner capture, confirm-or-correct form, documents list,
-  guardian acknowledgment screen. Typechecks and bundles; no part of it has
-  executed on a device. The likeliest breakage is ML Kit's OCR result shape,
-  handled defensively across three possible forms but never against real output.
+**Verified running on a device (Android emulator):** sign-up, log-in, traveler
+profiles including the minor badge, the traveler picker, empty states, and
+session persistence across a full app restart — which is the real proof the
+chunked SecureStore adapter works.
 
-**Dev build:** exists. Android development APK built 2026-09-05, downloaded to
-`build-artifacts/` (gitignored). EAS project is
-`@blackbirdzz-property/tripvault`. Install it, then `expo start --dev-client`.
+**Still unverified, and the main open risk:** the scan path end to end. The
+scanner launches, but no passport has been read. `lib/scan.ts` handles three
+possible ML Kit result shapes and has never seen real output. This needs a
+physical phone; an emulator webcam is not a fair test.
 
-**In progress:** Android Studio + emulator, so the UI can be exercised without a
-physical device. Note the emulator cannot meaningfully test the scanner — see
-the entry below.
+**Dev build:** Android development APK built 2026-09-05, in `build-artifacts/`
+(gitignored). EAS project `@blackbirdzz-property/tripvault`. Rebuild only when
+native dependencies change; JS reloads over Metro.
+
+**Local tooling** (no admin required, all under `%LOCALAPPDATA%`): Temurin JDK 21
+in `AndroidTooling\jdk`, Android SDK in `Android\Sdk` with platform-tools,
+emulator and the Android 35 **Google Play** system image. AVD is a Pixel 7 named
+`tripvault`. Launch:
+`%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd tripvault -camera-back webcam0`
+then `adb reverse tcp:8081 tcp:8081` and `npx expo start --dev-client`.
 
 **Not started:** Phases 3–10. Phase 8 (F6) is additionally blocked on
 `tripvault-entry-requirements-starter.md`, which does not exist — the setup doc
@@ -38,15 +45,10 @@ flags those IATA lookups as manual research.
 **Test counts:** 55 unit (`npm test`), 42 live (`scripts/verify-f1.mjs`,
 `scripts/verify-f11.mjs`).
 
-**Email confirmation: currently ON** (`mailer_autoconfirm: false`). It was turned
-off on 2026-09-05 to let the verification scripts sign throwaway accounts in,
-and was re-enabled shortly afterwards. On is the correct state for anything
-approaching real use — but note the consequence while developing: signing up
-from the app fails with `over_email_send_rate_limit`, because Supabase's
-built-in SMTP allows only a handful of messages an hour. `scripts/verify-f1.mjs`
-and `scripts/verify-f11.mjs` cannot run at all while it is on.
-
-Check before assuming either way:
+**Email confirmation: currently OFF** (`mailer_autoconfirm: true`), so sign-up
+works from the app and both verification scripts can run. This is a real hole —
+anyone can register under an address they do not own — and must go back on before
+real users. It has flipped several times; check rather than assume:
 `curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings`
 
 ---

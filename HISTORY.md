@@ -38,8 +38,16 @@ flags those IATA lookups as manual research.
 **Test counts:** 55 unit (`npm test`), 42 live (`scripts/verify-f1.mjs`,
 `scripts/verify-f11.mjs`).
 
-**Owed:** email confirmation is OFF on the Supabase project. See 2026-09-05
-below and `docs/tripvault-setup-steps.md`.
+**Email confirmation: currently ON** (`mailer_autoconfirm: false`). It was turned
+off on 2026-09-05 to let the verification scripts sign throwaway accounts in,
+and was re-enabled shortly afterwards. On is the correct state for anything
+approaching real use — but note the consequence while developing: signing up
+from the app fails with `over_email_send_rate_limit`, because Supabase's
+built-in SMTP allows only a handful of messages an hour. `scripts/verify-f1.mjs`
+and `scripts/verify-f11.mjs` cannot run at all while it is on.
+
+Check before assuming either way:
+`curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings`
 
 ---
 

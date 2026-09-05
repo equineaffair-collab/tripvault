@@ -41,3 +41,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Built APKs/AABs pulled down from EAS. Large binaries, reproducible from a
+# build, and never worth committing.
+build-artifacts/
+*.apk
+*.aab

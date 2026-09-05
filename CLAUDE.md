@@ -56,6 +56,14 @@ package with a native side, so the SDK-compatible version is chosen.
   reintroduce a hosted vision call for it. The Claude API is for F5's booking
   extraction only, where the input is unstructured booking text.
 
+## Open development settings
+Email confirmation is currently DISABLED on the Supabase project (turned off
+2026-09-05 so verification scripts can sign in throwaway accounts). This is a
+real hole -- anyone can register under an address they do not own -- and must
+be re-enabled before real users. Tracked in
+`docs/tripvault-setup-steps.md` under "Development settings to revert before
+launch". Mention it if the user seems close to shipping.
+
 ## Schema
 travelers (F11): id, user_id, name, relationship, is_minor,
   linked_auth_user_id (nullable, F9), created_at

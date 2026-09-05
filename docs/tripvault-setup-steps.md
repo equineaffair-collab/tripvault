@@ -29,6 +29,23 @@ Things Claude Code can't do for you — accounts, credentials, and decisions tha
 ## Before Phase 10 (F9 — family member access)
 - [ ] Decide whether linked family accounts require MFA (the feature plan's security review raises this as worth considering, given the sensitivity of what they can access).
 
+## Development settings to revert before launch
+
+Things switched off to make building possible, each of which is a real hole
+until it goes back. Re-check this list before any build reaches a real user.
+
+- [ ] **Re-enable email confirmation.** Turned OFF on 2026-09-05 so the
+  verification scripts could sign throwaway accounts straight in. While it is
+  off, anyone can register under an address they do not own. That matters more
+  here than in most apps: F5 later treats a per-user forwarding address as a
+  credential, and an unverified account holder would be handed one.
+  Authentication -> Sign In / Providers -> Confirm email, in the Supabase
+  dashboard. Confirm it took by checking `mailer_autoconfirm` reads `false`:
+  `curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings`
+  Do this alongside Phase 3's Postmark/Mailgun setup, since you will want your
+  own SMTP by then anyway -- Supabase's built-in sender is rate-limited to a
+  handful of messages an hour and will throttle real signups.
+
 ## Before launch, regardless of phase
 - [ ] **Legal review of the terms & conditions and security & compliance sections** in `tripvault-feature-plan.md` — treat both as a drafting brief for an actual lawyer, not final text. Flag two things specifically when you do this: the Australian Children's Online Privacy Code (must register by 10 December 2026, and the exposure draft names "family photo sharing applications" as an example of what it covers), and Australian Privacy Principle 9's restriction on using a passport number as an identifier.
 - [ ] Data processing agreements reviewed for every vendor handling sensitive data: Supabase, Anthropic, Postmark/Mailgun, RevenueCat, Stripe, and Peecho once F10 is built.

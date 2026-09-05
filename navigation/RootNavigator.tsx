@@ -6,12 +6,9 @@ import { useAuth } from '../contexts/AuthContext';
 import AuthScreen from '../screens/AuthScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import DocumentsScreen from '../screens/DocumentsScreen';
 
 const Tab = createBottomTabNavigator();
-
-function DocumentsScreen() {
-  return <PlaceholderScreen title="Documents" comingIn="Phase 2 (F1 — document vault)" />;
-}
 
 function TripsScreen() {
   return <PlaceholderScreen title="Trips" comingIn="Phase 5 (F3 — trip folder)" />;

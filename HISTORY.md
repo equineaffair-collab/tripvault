@@ -53,6 +53,50 @@ real users. It has flipped several times; check rather than assume:
 
 ---
 
+## 2026-09-05 — Phase 7 (F12): data export and account deletion
+
+28/28 live checks pass (`scripts/verify-f12.mjs`). The feature plan calls this
+one out as needing verification rather than just implementation, so the verifier
+builds an account with data in all six tables, exports it, deletes it, and then
+checks every row is gone.
+
+**Both actions are server-side, for different reasons.** Export must decrypt
+document numbers, which needs the key only an Edge Function holds. Deletion must
+remove the auth user itself, which needs the service role. Neither is possible
+from the app.
+
+**The export decrypts document numbers on purpose.** Storing them encrypted
+protects against a database breach, not against the owner reading their own
+record — an export that returned ciphertext would satisfy nothing. The verifier
+checks both halves: the plaintext number is present, and the ciphertext column is
+not also shipped.
+
+**Re-authentication is enforced, not assumed.** The function checks the age of
+the token's own `auth_time` against a five-minute window rather than inventing a
+second login flow; the app signs in again and retries, which produces a fresh
+token. Deletion additionally requires the literal string "DELETE" in the request,
+so it cannot be one stray call.
+
+**Storage objects are deleted explicitly.** They are not covered by the database
+cascade, so a passport scan would otherwise outlive the account that owned it.
+
+**`document_access_log` deliberately survives.** Its `actor_user_id` is ON DELETE
+SET NULL, so the record that access occurred outlives the account — which is the
+point of an audit log, and the opposite of what a cascade would do.
+
+**Checkpoint — needs you:** the Chrome extension became unresponsive mid-session
+(a wedged "unsaved changes" dialog in the Supabase SQL editor), so the direct SQL
+orphan audit could not be run. The API-level check passed and the cascades are
+FK-enforced, so this is added rigour rather than a gap. `scripts/audit-orphans.sql`
+holds the query to paste in when the browser is usable again.
+
+**Checkpoint — needs approval:** saving an export to a real file needs
+`expo-file-system` and `expo-sharing`. Until those are approved the export screen
+renders the package as selectable JSON, which works but is not what anyone wants
+for a data-portability feature.
+
+---
+
 ## 2026-09-05 — Phase 5 (F3): trips, attendees, checklist and bookings
 
 The biggest core feature, and fully unblocked. 26/26 live checks pass

@@ -19,6 +19,7 @@ import {
 import { RELATIONSHIP_LABELS, type Relationship, type Traveler } from '../types/traveler';
 import TravelerFormModal from './TravelerFormModal';
 import LoyaltyScreen from './LoyaltyScreen';
+import AccountScreen from './AccountScreen';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
@@ -29,6 +30,7 @@ export default function ProfileScreen() {
   // F4 lives one level down from a traveler rather than in its own tab: loyalty
   // numbers belong to a person, and the tab bar is already at three.
   const [loyaltyFor, setLoyaltyFor] = useState<Traveler | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [editing, setEditing] = useState<Traveler | null>(null);
 
   const refresh = useCallback(async () => {
@@ -90,6 +92,10 @@ export default function ProfileScreen() {
 
   if (loyaltyFor) {
     return <LoyaltyScreen traveler={loyaltyFor} onBack={() => setLoyaltyFor(null)} />;
+  }
+
+  if (accountOpen) {
+    return <AccountScreen onBack={() => setAccountOpen(false)} />;
   }
 
   return (
@@ -168,9 +174,14 @@ export default function ProfileScreen() {
           </Pressable>
         )}
         ListFooterComponent={
+          <>
+          <Pressable style={styles.dataLink} onPress={() => setAccountOpen(true)}>
+            <Text style={styles.dataLinkText}>Export or delete my data</Text>
+          </Pressable>
           <Pressable style={styles.signOut} onPress={confirmSignOut}>
             <Text style={styles.signOutText}>Log out</Text>
           </Pressable>
+          </>
         }
       />
 
@@ -230,6 +241,8 @@ const styles = StyleSheet.create({
   minorBadgeText: { color: '#12448F', fontSize: 12, fontWeight: '600' },
   loyaltyLink: { paddingLeft: 10, paddingVertical: 4 },
   loyaltyLinkText: { color: '#1B6EF3', fontSize: 14, fontWeight: '600' },
+  dataLink: { paddingVertical: 16, alignItems: 'center' },
+  dataLinkText: { color: '#1B6EF3', fontSize: 15, fontWeight: '600' },
   signOut: {
     marginTop: 32,
     borderWidth: 1,

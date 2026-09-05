@@ -10,6 +10,7 @@
     ]
   },
   "exclude": [
-    "supabase/functions/documents/**"
+    "supabase/functions/documents/**",
+    "supabase/functions/account/**"
   ]
 }

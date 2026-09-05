@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { listTravelers } from '../lib/travelers';
@@ -59,9 +60,15 @@ export default function DocumentsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  // On focus, not on mount. React Navigation keeps tab screens mounted, so a
+  // plain useEffect runs once and never again -- meaning a traveler added on
+  // the Profile tab would not appear here until the app restarted, and the
+  // "add a traveler first" empty state would show while two already existed.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh])
+  );
 
   /**
    * Upload the scan after the row exists: the storage path embeds the document
@@ -260,7 +267,14 @@ export default function DocumentsScreen() {
 
       <Pressable
         style={styles.addButton}
-        onPress={() => setMode({ kind: 'pickTraveler' })}
+        onPress={() => {
+          // Refresh as the picker opens, not only when the tab regains focus:
+          // a traveler can be added and returned from without this screen ever
+          // losing focus, and an empty picker reading "add a traveler first"
+          // while two exist is the worst version of being stale.
+          void refresh();
+          setMode({ kind: 'pickTraveler' });
+        }}
         disabled={loading}
       >
         <Text style={styles.addButtonText}>Add document</Text>

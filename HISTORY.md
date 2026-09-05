@@ -51,6 +51,44 @@ Check before assuming either way:
 
 ---
 
+## 2026-09-05 — First run on a device, and what it found
+
+Ran the whole Phase 2 UI on an Android emulator for the first time. Sign-up,
+traveler profiles, the minor badge and the traveler picker all work. The session
+survived a full app restart, so the chunked SecureStore adapter does what it was
+written to do on a real device.
+
+**The document scanner is a Google Play Services on-demand module, not part of
+our APK.** Launching it triggered "Downloading updates to Google Play services"
+and pulled `mlkit.docscan.ui`, `.crop`, `.detect`, `.enhance`, `.shadow` and
+`.stain`. This matters for F1's offline story and is easy to get wrong:
+- ML Kit **text recognition** models *are* bundled in our APK
+  (`assets/mlkit-google-ocr-models/`), so OCR itself is genuinely offline.
+- The **scanner UI** is not. A user's first scan needs a network connection,
+  and on a device without Play Services it will not work at all.
+
+So "extraction never leaves the device" remains true — nothing is uploaded — but
+"works with no signal" is only true after the scanner modules have been fetched
+once. Worth saying accurately in any user-facing copy, and worth a graceful
+message when the download fails.
+
+**Bug found and fixed: the Documents screen served stale data.** It fetched on
+mount, and React Navigation keeps tab screens mounted, so a traveler added on the
+Profile tab never appeared — the picker showed "add a traveler on the Profile tab
+first" while two already existed. Fixed with `useFocusEffect`, plus a refresh
+when the picker opens: the first fix alone was not enough, because the picker can
+be opened without this screen ever losing focus. Only running the app finds this.
+
+**Transient `JWT issued at future`** right after signup, from emulator clock
+drift. Resolved by toggling `auto_time`; host and emulator now agree to within a
+second. Not an app bug, but worth recognising rather than chasing.
+
+**Cosmetic gaps, not yet fixed:** the tab bar has no icons (Android renders
+placeholder glyphs), and the "Add traveler" heading sits under the status bar
+because that screen has no safe-area padding.
+
+---
+
 ## 2026-09-05 — First Android dev build, and an EAS environment trap
 
 Build finished in ~10 minutes. APK is 230 MB (dev client plus every native

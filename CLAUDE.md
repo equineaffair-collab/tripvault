@@ -15,6 +15,11 @@ covers only project-wide conventions and the consolidated schema; it does
 not restate feature behavior — if something seems ambiguous, the feature
 plan is the tie-breaker, not this file.
 
+Project history -- why decisions went the way they did, and what is actually
+verified versus merely written: `HISTORY.md` in the repo root. Read it before
+starting work, and update it when a meaningful unit of work completes. The
+global directive in ~/.claude/CLAUDE.md covers how.
+
 Build phases and their prompts: `docs/tripvault-claude-code-prompts.md`.
 Test plan: `docs/tripvault-test-plan.md`.
 Manual/account setup you must do yourself: `docs/tripvault-setup-steps.md`.

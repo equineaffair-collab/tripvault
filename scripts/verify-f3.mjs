@@ -234,15 +234,22 @@ if (tripId && itemId) {
   check('deleting the booking clears the link but keeps the item', after && after.linked_trip_item_id === null);
 }
 
-console.log('\nF6 soft integration (Phase 5 half of the test)');
+console.log('\nF6 soft integration (Phase 8 half of the test)');
 {
+  // The test plan asks this be checked twice: before F6 exists (the fallback is
+  // the live path) and again after (the real check runs). Phase 8 has landed, so
+  // this asserts the second state. Were it to start failing, F6's table has gone
+  // and F3 should be quietly falling back rather than erroring.
   const { error } = await a.from('entry_requirements').select('country').limit(1);
-  const missing = error?.code === 'PGRST205' || /schema cache/i.test(error?.message ?? '');
-  check(
-    'entry_requirements does not exist yet, so the fallback path is the live one',
-    missing,
-    error?.code ?? 'table exists — F6 may now be built'
-  );
+  check('entry_requirements exists, so the real check is the live path', !error, error?.code ?? '');
+
+  const { data } = await a
+    .from('entry_requirements')
+    .select('country, min_passport_validity_months, verified')
+    .eq('country', 'THA')
+    .maybeSingle();
+  check('a destination rule can be read', Boolean(data), JSON.stringify(data ?? {}));
+  check('seeded rules are marked unverified', data?.verified === false, String(data?.verified));
 }
 
 console.log('\nSecurity — cross-account isolation');

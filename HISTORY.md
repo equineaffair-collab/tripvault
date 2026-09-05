@@ -53,6 +53,57 @@ real users. It has flipped several times; check rather than assume:
 
 ---
 
+## 2026-09-05 — Phase 8 (F6): passport validity checker
+
+15/15 live checks (`scripts/verify-f6.mjs`), 19 unit tests, and F3's verifier
+updated to 28/28 for its Phase 8 state.
+
+**F3's soft integration flipped with no change on F3's side.** The availability
+probe asks whether F6's table exists; creating it turned the real check on. That
+is what the seam was for, and it is the clearest evidence the decoupling was
+worth building properly rather than as a flag.
+
+**The seed data is deliberately all `verified = false`.** These are the widely
+published general rules, entered so the feature could be built and exercised.
+They are NOT the IATA Travel Centre lookups that
+`docs/tripvault-setup-steps.md` assigns as manual research, and they are not
+authoritative — rules vary by nationality, purpose of travel and route, and none
+of that is captured. The app words its disclaimer differently for unverified
+rows, and the verifier asserts every seeded row is still unverified.
+
+A CHECK constraint enforces that a row cannot claim `verified` without a
+`last_verified` date. Otherwise a flag set by hand is indistinguishable from one
+confirmed years ago, which is the failure mode that makes stale reference data
+dangerous rather than merely wrong.
+
+**`counted_from` is not decoration.** Entry rules count from arrival, exit rules
+from departure, and the difference is the length of the trip — six months from
+arrival on a three-month stay is three months past the return. Schengen's rule
+counts from departure; most six-month rules count from entry.
+
+**Recommendation logic:** among passports that clear, prefer the one lasting
+longest (least likely to need renewing before the next trip); ties go to the
+traveler's own primary. The verifier deliberately sets up a case where the
+primary passport is the one that does NOT clear, so a recommendation that just
+returned the primary would fail.
+
+**Two tests exist purely to police the F6/F7 split:** one asserts no visa column
+in the table, another that no F6 output string contains the word "visa". A visa
+determination reappearing here is the clearest sign the two features have started
+merging back together, which the feature plan says was already undone once.
+
+**A verifier assertion of mine was wrong and passed for the wrong reason.** I
+checked that a client UPDATE on reference data returns an error. With RLS on and
+no UPDATE policy, Postgres filters the row out instead — the call succeeds
+against zero rows. Now it checks the data is genuinely unchanged, which is the
+property that actually matters.
+
+**Still open:** F6 should be gated to Pro/Family/Lifetime per F8, which does not
+exist yet. Working through the IATA lookups and flipping rows to verified is a
+real task that remains.
+
+---
+
 ## 2026-09-05 — Phase 3 (F2): expiry reminders
 
 22/22 live checks (`scripts/verify-f2.mjs`) and 27 unit tests. The sweep accepts

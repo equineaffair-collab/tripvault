@@ -37,7 +37,10 @@ import {
 } from '../lib/trips';
 import {
   ENTRY_REQUIREMENTS_UNAVAILABLE_MESSAGE,
+  ENTRY_REQUIREMENT_UNKNOWN_MESSAGE,
+  disclaimerFor,
   isEntryRequirementCheckAvailable,
+  runEntryRequirementCheck,
 } from '../lib/entryRequirements';
 
 /**
@@ -98,9 +101,12 @@ export default function TripDetailScreen({
   }, [refresh]);
 
   /**
-   * F3's soft integration point with F6. Availability is probed, and when F6
-   * does not exist the button says so plainly rather than erroring or being
-   * hidden. This is the path that actually runs until Phase 8.
+   * F3's soft integration point with F6.
+   *
+   * Availability is probed, not assumed. Before Phase 8 this took the "not
+   * available yet" path; now that F6's reference table exists the same code
+   * runs the real check, with no change on this side -- which is what the soft
+   * integration was for.
    */
   async function checkEntryRequirements() {
     setCheckingEntry(true);
@@ -109,12 +115,54 @@ export default function TripDetailScreen({
         Alert.alert('Entry requirements', ENTRY_REQUIREMENTS_UNAVAILABLE_MESSAGE);
         return;
       }
+
+      const country = (trip.destination ?? '').trim();
+      if (!country) {
+        Alert.alert(
+          'Entry requirements',
+          "Add a destination to this trip first — the rule depends on where you're going."
+        );
+        return;
+      }
+
+      const named = attendees.map((t) => ({ id: t.id, name: t.name }));
+      const { requirement, results } = await runEntryRequirementCheck({
+        destinationCountry: country,
+        attendees: named,
+        startDate: trip.start_date,
+        endDate: trip.end_date,
+      });
+
+      if (!requirement) {
+        Alert.alert('Entry requirements', ENTRY_REQUIREMENT_UNKNOWN_MESSAGE);
+        return;
+      }
+
+      const lines = results.map((r) =>
+        r.problem ? `• ${r.problem}` : `• ${r.check?.recommendationReason ?? ''}`
+      );
+
+      Alert.alert(
+        `${requirement.countryName} — passport validity`,
+        `${lines.join('\n\n')}\n\n${disclaimerFor(requirement)}`
+      );
+
+      // F3: anything flagged becomes a checklist item, so it is not just an
+      // alert the user dismisses and forgets.
+      const failing = results.filter((r) => r.problem || r.check?.anyClears === false);
+      for (const r of failing) {
+        await addChecklistItem(
+          trip.id,
+          `Sort out ${r.travelerName}'s passport for ${requirement.countryName}`,
+          'documents'
+        ).catch(() => undefined);
+      }
+      if (failing.length > 0) setChecklist(await listChecklist(trip.id));
+    } catch (e) {
       Alert.alert(
         'Entry requirements',
-        'F6 is available — the real check runs from Phase 8 onward.'
+        e instanceof Error ? e.message : ENTRY_REQUIREMENTS_UNAVAILABLE_MESSAGE
       );
-    } catch (e) {
-      Alert.alert('Entry requirements', ENTRY_REQUIREMENTS_UNAVAILABLE_MESSAGE);
     } finally {
       setCheckingEntry(false);
     }

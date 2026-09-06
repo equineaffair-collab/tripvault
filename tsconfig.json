@@ -13,6 +13,8 @@
     "supabase/functions/documents/**",
     "supabase/functions/account/**",
     "supabase/functions/reminder-sweep/**",
+    "supabase/functions/invite/**",
+    "supabase/functions/shared-trip/**",
     "supabase/functions/_shared/email.ts"
   ]
 }

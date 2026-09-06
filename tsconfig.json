@@ -15,6 +15,9 @@
     "supabase/functions/reminder-sweep/**",
     "supabase/functions/invite/**",
     "supabase/functions/shared-trip/**",
+    "supabase/functions/smart-import/**",
+    "supabase/functions/inbound-email/**",
+    "supabase/functions/_shared/extraction.ts",
     "supabase/functions/_shared/email.ts"
   ]
 }

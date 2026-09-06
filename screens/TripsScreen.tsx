@@ -23,11 +23,14 @@ import {
   type Trip,
 } from '../lib/trips';
 import TripDetailScreen from './TripDetailScreen';
+import SmartImportScreen from './SmartImportScreen';
+import { holdingAreaSummary, listHoldingArea } from '../lib/smartImport';
 
 type Mode =
   | { kind: 'list' }
   | { kind: 'form'; existing: Trip | null }
-  | { kind: 'detail'; trip: Trip };
+  | { kind: 'detail'; trip: Trip }
+  | { kind: 'smartImport' };
 
 export default function TripsScreen() {
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -35,6 +38,10 @@ export default function TripsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
+  // F5's holding area. Surfaced here rather than on its own tab: a booking with
+  // no trip is a trips problem, and one that is only visible behind a menu is
+  // one nobody files.
+  const [waiting, setWaiting] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -44,9 +51,10 @@ export default function TripsScreen() {
     }
     setLoading(true);
     try {
-      const [t, p] = await Promise.all([listTrips(), listTravelers()]);
+      const [t, p, held] = await Promise.all([listTrips(), listTravelers(), listHoldingArea()]);
       setTrips(t);
       setTravelers(p);
+      setWaiting(held.length);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -62,6 +70,17 @@ export default function TripsScreen() {
       void refresh();
     }, [refresh])
   );
+
+  if (mode.kind === 'smartImport') {
+    return (
+      <SmartImportScreen
+        onBack={() => {
+          setMode({ kind: 'list' });
+          void refresh();
+        }}
+      />
+    );
+  }
 
   if (mode.kind === 'detail') {
     return (
@@ -112,6 +131,13 @@ export default function TripsScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.heading}>Trips</Text>
+
+        <Pressable onPress={() => setMode({ kind: 'smartImport' })} hitSlop={8}>
+          <Text style={styles.smartImportLink}>
+            Smart import{waiting > 0 ? ` — ${holdingAreaSummary(waiting)}` : ''} ›
+          </Text>
+        </Pressable>
+
         {error && <Text style={styles.error}>{error}</Text>}
         {loading && <ActivityIndicator style={styles.spinner} />}
 
@@ -310,6 +336,7 @@ function TripForm({
 export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   scroll: { padding: 24, gap: 12, paddingBottom: 40 },
+  smartImportLink: { color: '#1B6EF3', fontSize: 15, fontWeight: '600', marginBottom: 14 },
   heading: { fontSize: 22, fontWeight: '700' },
   error: { color: '#C4342B', fontSize: 14 },
   empty: { color: '#666', fontSize: 15, lineHeight: 21 },

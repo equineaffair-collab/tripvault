@@ -55,3 +55,8 @@ scripts/.sweep-secret
 # Supabase service role key, used only by the verifier scripts to grant a test
 # account a paid tier. Never committed.
 scripts/.service-key
+
+# F5 inbound webhook shared secret, for scripts/verify-f5.mjs. Machine
+# credential, not a user secret -- worst case someone posts a fake email to an
+# address they would already have to know. Rotate if it leaks.
+scripts/.inbound-secret

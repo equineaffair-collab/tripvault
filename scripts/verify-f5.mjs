@@ -4,11 +4,14 @@
  *   node scripts/verify-f5.mjs
  *
  * The interesting half is Path B, and it can be verified in full without an
- * email provider: the webhook is an HTTP endpoint, so this posts a realistic
- * Postmark payload at it and checks what lands. What CANNOT be verified here is
- * extraction itself — no Anthropic key is configured — so the run asserts the
- * honest behaviour instead: the message is recorded, kept, and left waiting to
- * be read rather than dropped or marked failed.
+ * email provider: the webhook is an HTTP endpoint, so this posts realistic
+ * Postmark payloads at it and checks what lands.
+ *
+ * Extraction is verified too, and no API key is configured on this project —
+ * that is the point. One payload carries the schema.org markup a real airline
+ * confirmation ships and must be read exactly; one is plain text and must be
+ * read but flagged as a guess; one is a marketing email from the same airline
+ * and must produce nothing at all.
  *
  * Requires the service role key (scripts/.service-key) to grant a Pro tier, and
  * scripts/.inbound-secret to sign webhook calls. Requires "Confirm email" OFF.
@@ -237,19 +240,150 @@ console.log('\nA forwarded booking arrives and is kept');
   check('with its subject', mail?.[0]?.subject?.includes(String(stamp)), mail?.[0]?.subject ?? '');
   check('and its sender', mail?.[0]?.from_address?.includes('example-airline'), mail?.[0]?.from_address ?? '');
 
-  // The honest state of this project: no extraction provider is configured, so
-  // the message waits rather than being marked failed and forgotten.
+  // Rewritten 2026-09-07. This used to assert the message was left 'pending'
+  // because no API key was configured. Extraction no longer needs one, so the
+  // honest assertion is that it was read on arrival.
   check(
-    'it is left waiting to be read, not failed',
-    mail?.[0]?.status === 'pending',
+    'it is read on arrival, not parked',
+    mail?.[0]?.status === 'extracted',
     `${mail?.[0]?.status} — ${mail?.[0]?.detail}`
   );
   check(
-    'the body is kept so it can be read once extraction is switched on',
+    'the body is kept, so a message can be re-read later',
     Boolean(mail?.[0]?.body_text),
     `${mail?.[0]?.body_text?.length ?? 0} chars`
   );
-  check('and no booking was invented from it', mail?.[0]?.trip_item_id === null, String(mail?.[0]?.trip_item_id));
+  check('and it became a booking', Boolean(mail?.[0]?.trip_item_id), 'no item');
+
+  await user.from('trip_items').delete().eq('user_id', uUser.id);
+}
+
+console.log("\nA forwarded booking is READ, with no API key configured");
+{
+  // The whole point of the 2026-09-07 rewrite. Before it, this message would
+  // have been stored and left unread until somebody bought an API key. The
+  // markup below is Google's email schema, which is what real airline
+  // confirmations carry.
+  const flightMarkup = {
+    '@context': 'http://schema.org',
+    '@type': 'FlightReservation',
+    reservationNumber: `MK${stamp % 10000}`,
+    reservationFor: {
+      '@type': 'Flight',
+      flightNumber: '1',
+      airline: { '@type': 'Airline', name: 'Verified Air', iataCode: 'VA' },
+      departureAirport: { '@type': 'Airport', iataCode: 'SYD' },
+      arrivalAirport: { '@type': 'Airport', iataCode: 'LHR' },
+      departureTime: '2027-03-14T09:20:00+11:00',
+    },
+  };
+
+  const r = await postWebhook(
+    postmarkPayload(`${localPart}@trips.test`, {
+      Subject: `Markup booking ${stamp}`,
+      HtmlBody:
+        `<html><body><p>Your booking is confirmed.</p><script type="application/ld+json">` +
+        `${JSON.stringify(flightMarkup)}</script></body></html>`,
+    })
+  );
+  check('the webhook accepts it', r.status === 200, `HTTP ${r.status}`);
+
+  const { data: mail } = await user
+    .from('inbound_emails')
+    .select('status, detail, trip_item_id')
+    .order('received_at', { ascending: false })
+    .limit(1);
+
+  check(
+    'and it is EXTRACTED, not left waiting for a provider',
+    mail?.[0]?.status === 'extracted',
+    `${mail?.[0]?.status} — ${mail?.[0]?.detail}`
+  );
+  check(
+    'the receipt says it was read from the booking data, not guessed',
+    /json-ld/.test(mail?.[0]?.detail ?? ''),
+    mail?.[0]?.detail ?? ''
+  );
+
+  const { data: item } = await user
+    .from('trip_items')
+    .select('id, type, provider, confirmation_number, item_date, source, notes, trip_id')
+    .eq('id', mail?.[0]?.trip_item_id ?? '')
+    .maybeSingle();
+
+  check('a booking was created', Boolean(item), 'none');
+  check('with the right type', item?.type === 'flight', item?.type ?? '');
+  check('the airline, not the sender', item?.provider === 'Verified Air', item?.provider ?? '');
+  check(
+    'the booking reference',
+    item?.confirmation_number === `MK${stamp % 10000}`,
+    item?.confirmation_number ?? ''
+  );
+  // +11:00 on the 14th at 09:20 is 22:20 UTC on the 13th. Getting this wrong
+  // moves a flight by a day, in the direction that makes someone miss it.
+  check(
+    'and the departure time with its timezone applied',
+    String(item?.item_date).startsWith('2027-03-13T22:20'),
+    String(item?.item_date)
+  );
+  check('the flight number and route are noted', /VA1/.test(item?.notes ?? ''), item?.notes ?? '');
+  check('it lands in the holding area, not a trip', item?.trip_id === null, String(item?.trip_id));
+
+  await user.from('trip_items').delete().eq('id', item?.id ?? '');
+}
+
+console.log("\nA plain-text confirmation is read too, and says it was a guess");
+{
+  const r = await postWebhook(
+    postmarkPayload(`${localPart}@trips.test`, { Subject: `Plain booking ${stamp}` })
+  );
+  check('the webhook accepts it', r.status === 200, `HTTP ${r.status}`);
+
+  const { data: mail } = await user
+    .from('inbound_emails')
+    .select('status, detail, trip_item_id')
+    .order('received_at', { ascending: false })
+    .limit(1);
+
+  check('it is extracted', mail?.[0]?.status === 'extracted', `${mail?.[0]?.status}`);
+  check(
+    'and flagged as read from the wording, so the user checks it',
+    /worth checking/.test(mail?.[0]?.detail ?? ''),
+    mail?.[0]?.detail ?? ''
+  );
+
+  const { data: item } = await user
+    .from('trip_items')
+    .select('id, confirmation_number, item_date')
+    .eq('id', mail?.[0]?.trip_item_id ?? '')
+    .maybeSingle();
+
+  check('the reference was found', item?.confirmation_number === 'ZZ9ABC', item?.confirmation_number ?? '');
+  check('and the date', String(item?.item_date).startsWith('2027-03-14'), String(item?.item_date));
+
+  await user.from('trip_items').delete().eq('id', item?.id ?? '');
+}
+
+console.log("\nA marketing email produces nothing at all");
+{
+  const r = await postWebhook(
+    postmarkPayload(`${localPart}@trips.test`, {
+      Subject: `Sale ${stamp}`,
+      TextBody: 'Summer sale! Save 30% on beach holidays this year. Unsubscribe here.',
+    })
+  );
+  check('the webhook accepts it', r.status === 200, `HTTP ${r.status}`);
+
+  const { data: mail } = await user
+    .from('inbound_emails')
+    .select('status, trip_item_id')
+    .order('received_at', { ascending: false })
+    .limit(1);
+
+  // An empty booking somebody then has to find and delete is worse than a
+  // message that says plainly it was not a booking.
+  check('it is marked unreadable', mail?.[0]?.status === 'unreadable', `${mail?.[0]?.status}`);
+  check('and no booking was invented', mail?.[0]?.trip_item_id === null, String(mail?.[0]?.trip_item_id));
 }
 
 console.log('\nThe user owns what arrived');
@@ -269,13 +403,14 @@ console.log('\nThe user owns what arrived');
   await admin.auth.admin.deleteUser(sUser.id).catch(() => {});
 
   const { data: mine } = await user.from('inbound_emails').select('id');
+  const before = mine.length;
   const { error: delErr } = await user.from('inbound_emails').delete().eq('id', mine[0].id);
   // Deleting is how someone clears stored mail content they would rather not
   // have kept. It has to work.
   check('but the owner can delete it', !delErr, delErr?.message ?? '');
 
   const { count } = await user.from('inbound_emails').select('id', { count: 'exact', head: true });
-  check('and the content is genuinely gone', count === 0, `${count}`);
+  check('and that message is genuinely gone', count === before - 1, `${before} -> ${count}`);
 }
 
 console.log('\nThe holding area');
@@ -401,18 +536,29 @@ console.log('\nRotating an address');
   check('the old address is not kept anywhere', count === 0, `${count} rows`);
 }
 
-console.log('\nExtraction, which is not configured on this project');
+console.log('\nExtraction needs no API key at all now');
 {
+  // This used to assert a 501 EXTRACTION_UNAVAILABLE. There is no such state
+  // any more: the deterministic parser needs nothing configured, so the action
+  // either reads the booking or says plainly that the text was not one.
   const r = await fn(user, 'smart-import', {
     action: 'extract',
-    text: 'Booking reference ABC123, departing 14 March 2027.',
+    text: 'Booking reference: QQ8ZZZ\nYour flight departs 14 March 2027 at 09:20.',
   });
+  check('booking text is read with no key present', !r.error, r.error?.error ?? '');
+  check('the reference is found', r.data?.booking?.confirmationNumber === 'QQ8ZZZ', r.data?.booking?.confirmationNumber ?? '');
+  check('and the method is reported', r.data?.method === 'patterns', String(r.data?.method));
   check(
-    'the app is told the feature is unavailable, not that it failed',
-    r.error?.code === 'EXTRACTION_UNAVAILABLE',
-    `${r.status} ${r.error?.code ?? r.error?.error}`
+    'the project confirms no model fallback is configured',
+    r.data?.modelFallback === false,
+    String(r.data?.modelFallback)
   );
-  check('with a 501, so it reads as "not built yet" rather than "broken"', r.status === 501, `HTTP ${r.status}`);
+
+  const junk = await fn(user, 'smart-import', {
+    action: 'extract',
+    text: 'Thanks for subscribing to our newsletter. Unsubscribe any time.',
+  });
+  check('text that is not a booking is refused clearly', junk.error?.code === 'UNREADABLE', `${junk.status} ${junk.error?.code}`);
 }
 
 console.log('\nCleanup');

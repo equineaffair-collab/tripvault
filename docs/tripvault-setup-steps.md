@@ -11,10 +11,13 @@ waiting on you; nothing else is. `HISTORY.md` has the reasoning for each.
 - [x] Create a Supabase project — get the URL, anon key, and service role key.
       *(Done. The service role key was fetched from the authenticated CLI on
       2026-09-06 and is in `scripts/.service-key`, gitignored.)*
-- [ ] Get an Anthropic API key — **now only needed for F5's booking extraction.**
-      F1's document extraction moved on-device on 2026-09-05 and needs no key.
-      Set it with `supabase secrets set ANTHROPIC_API_KEY=...`; until then
-      forwarded mail is stored and left unread rather than lost.
+- [x] ~~Get an Anthropic API key.~~ **No longer required by anything.** F1's
+      document extraction moved on-device on 2026-09-05, and F5's booking
+      extraction was rewritten on 2026-09-07 to read the machine-readable
+      booking data real confirmations already carry. A key is now an optional
+      extra (`supabase secrets set ANTHROPIC_API_KEY=...`) that only sees
+      messages the parser could not read — worth adding if a lot of your
+      confirmations come from small vendors, and not worth it otherwise.
 - [ ] Register a domain if you don't have one yet (needed later for the email subdomain in Phase 3/9).
 - [x] Create an empty GitHub repository. *(Done: equineaffair-collab/tripvault.)*
 

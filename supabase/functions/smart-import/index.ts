@@ -4,12 +4,17 @@
  * Actions (POST, JSON body, authenticated):
  *   address {}                  -> the caller's forwarding address, creating one if needed
  *   rotate  {}                  -> replace it; the old one stops working immediately
- *   extract { text, tripId? }   -> read booking text and return the fields, unsaved
+ *   extract { text, html? }      -> read booking text and return the fields, unsaved
  *
  * `extract` deliberately returns the extraction rather than writing it. F5 is
  * explicit that the form pre-fills and the user confirms or corrects before it
  * is saved -- the same shape F1 uses for a scanned passport, and for the same
- * reason: a model's reading of a document is a draft, not a record.
+ * reason: a machine's reading of a document is a draft, not a record.
+ *
+ * Note that the app parses locally first (lib/bookingParse.ts runs perfectly
+ * well on the device), so this action is only reached for text the deterministic
+ * parser could not read. It exists because the optional model fallback needs a
+ * key that must never be in the app bundle.
  *
  * The forwarding address is minted here because it must come from a CSPRNG the
  * client does not have, and must not be chosen by the caller. There is no
@@ -19,7 +24,7 @@
  *   supabase functions deploy smart-import
  */
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { extractBooking, isExtractionConfigured } from '../_shared/extraction.ts';
+import { extractBooking, isModelFallbackConfigured } from '../_shared/extraction.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -172,21 +177,29 @@ async function handleAddress(
 
 async function handleExtract(body: Record<string, unknown>): Promise<Response> {
   const text = typeof body.text === 'string' ? body.text : '';
-  if (!text.trim()) return json({ error: 'There was nothing to read.' }, 400);
+  const html = typeof body.html === 'string' ? body.html : null;
 
-  const outcome = await extractBooking(text);
+  if (!text.trim() && !html) return json({ error: 'There was nothing to read.' }, 400);
 
-  if (outcome.status === 'unconfigured') {
-    // 501, not 500: this is a thing the server does not do yet, not a thing
-    // that went wrong. The app shows the manual form and says so.
-    return json({ error: outcome.detail, code: 'EXTRACTION_UNAVAILABLE' }, 501);
-  }
+  const outcome = await extractBooking({
+    text,
+    html,
+    subject: typeof body.subject === 'string' ? body.subject : null,
+  });
+
   if (outcome.status === 'unreadable') {
+    // 422, and it means what it says: the content was read and is not a
+    // booking. There is no longer an "unavailable" case -- extraction always
+    // runs, because the deterministic parser needs nothing configured.
     return json({ error: outcome.detail, code: 'UNREADABLE' }, 422);
   }
   if (outcome.status === 'failed') {
     return json({ error: outcome.detail, code: 'EXTRACTION_FAILED' }, 502);
   }
 
-  return json({ booking: outcome.booking, configured: isExtractionConfigured() });
+  return json({
+    booking: outcome.booking,
+    method: outcome.method,
+    modelFallback: isModelFallbackConfigured(),
+  });
 }

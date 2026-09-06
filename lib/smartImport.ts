@@ -7,6 +7,8 @@
  * trip, which is where the two paths finally meet.
  */
 import { supabase } from './supabase';
+import { parseBooking } from './bookingParse';
+import { isUsableExtraction } from './smartImportFormat';
 import type { ExtractedBooking, InboundStatus, TripWindow } from './smartImportFormat';
 
 export {
@@ -36,17 +38,11 @@ export class SmartImportNotIncluded extends Error {
   }
 }
 
-/**
- * Raised when no extraction provider is configured on the project.
- *
- * A distinct type because the answer is completely different: the user has done
- * nothing wrong and cannot fix it, so the app falls back to the manual form
- * rather than asking them to try again.
- */
-export class ExtractionUnavailable extends Error {
+/** Raised when the content was read and simply is not a booking. */
+export class NotABooking extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ExtractionUnavailable';
+    this.name = 'NotABooking';
   }
 }
 
@@ -58,7 +54,7 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
     if (response && typeof response.json === 'function') {
       const payload = await response.json().catch(() => null);
       if (payload?.code === 'TIER_REQUIRED') throw new SmartImportNotIncluded(payload.error);
-      if (payload?.code === 'EXTRACTION_UNAVAILABLE') throw new ExtractionUnavailable(payload.error);
+      if (payload?.code === 'UNREADABLE') throw new NotABooking(payload.error);
       if (payload?.error) throw new Error(payload.error);
     }
     throw new Error(error.message);
@@ -141,16 +137,41 @@ export async function deleteInboundEmail(id: string): Promise<void> {
 // Path A — reading a booking inside the app
 // ---------------------------------------------------------------------------
 
+export type ExtractionAttempt = {
+  booking: ExtractedBooking;
+  method: 'json-ld' | 'ics' | 'patterns' | 'model';
+  /** True when the answer came from markup or a calendar rather than a guess. */
+  exact: boolean;
+};
+
 /**
  * Read booking text and return the fields, unsaved.
  *
+ * Parsed on the DEVICE first. lib/bookingParse is pure and has no network in
+ * it, so the common case costs one function call, works with no signal, and
+ * sends nothing anywhere. Only text the parser cannot read goes to the server,
+ * and only because the optional model fallback needs a key that must never sit
+ * in the app bundle.
+ *
  * Nothing is written here on purpose. F5 specifies that the form pre-fills and
  * the user confirms or corrects before saving, which is the same shape F1 uses
- * for a scanned passport: a model's reading of a document is a draft.
+ * for a scanned passport: a machine's reading of a document is a draft.
  */
-export async function extractBookingText(text: string): Promise<ExtractedBooking> {
-  const { booking } = await call<{ booking: ExtractedBooking }>({ action: 'extract', text });
-  return booking;
+export async function extractBookingText(
+  text: string,
+  html?: string | null
+): Promise<ExtractionAttempt> {
+  const local = parseBooking({ text, html: html ?? null });
+  if (local && isUsableExtraction(local.booking)) {
+    return { booking: local.booking, method: local.method, exact: local.method !== 'patterns' };
+  }
+
+  const result = await call<{ booking: ExtractedBooking; method: ExtractionAttempt['method'] }>({
+    action: 'extract',
+    text,
+    ...(html ? { html } : {}),
+  });
+  return { booking: result.booking, method: result.method, exact: result.method !== 'patterns' };
 }
 
 // ---------------------------------------------------------------------------

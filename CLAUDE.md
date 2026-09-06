@@ -27,8 +27,9 @@ Manual/account setup you must do yourself: `docs/tripvault-setup-steps.md`.
 ## Stack
 React Native + Expo (dev build required, not Expo Go) · Supabase (Postgres,
 Auth, Storage, Edge Functions, pg_cron) · on-device OCR (@react-native-ml-kit/
-text-recognition + the `mrz` package) for F1's MRZ extraction · Claude API for
-F5's booking extraction only · react-native-document-scanner-plugin for capture ·
+text-recognition + the `mrz` package) for F1's MRZ extraction · deterministic
+parsing (schema.org markup, .ics, patterns) for F5's booking extraction, with
+the Claude API as an OPTIONAL fallback · react-native-document-scanner-plugin ·
 Postmark or Mailgun for email (both transactional and inbound parsing) ·
 Expo push notifications · RevenueCat for subscriptions · Stripe (separate
 from RevenueCat) for physical goods · Peecho for print fulfillment (future).
@@ -58,8 +59,17 @@ package with a native side, so the SDK-compatible version is chosen.
   yet" message if F6 isn't built, never error or disappear.
 - Never send a passport or ID image off the device. F1's MRZ extraction is
   on-device by design (see F1's design note in the feature plan) — do not
-  reintroduce a hosted vision call for it. The Claude API is for F5's booking
-  extraction only, where the input is unstructured booking text.
+  reintroduce a hosted vision call for it.
+- No feature REQUIRES an AI API key. F5's booking extraction was rewritten on
+  2026-09-07 to read schema.org markup, .ics attachments and then patterns, in
+  that order (`lib/bookingParse.ts`) — most real confirmations carry
+  machine-readable booking data, which is the same insight that moved F1
+  on-device. `ANTHROPIC_API_KEY` is now an optional extra that only ever sees
+  text the parser could not read. Do not put a model back in front of it: an
+  exact answer must never be replaced by an inferred one.
+- Anything read by patterns is reported as LOW confidence, always, and the
+  interface says so. A guess presented as a fact is this feature's worst
+  failure mode.
 
 ## Open development settings
 Email confirmation is currently DISABLED on the Supabase project (turned off

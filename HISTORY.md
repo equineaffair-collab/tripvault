@@ -8,13 +8,13 @@ unproven. Read the Current state section first.
 
 ## Current state
 
-*As of 2026-09-06.*
+*As of 2026-09-07.*
 
 **Every phase the build plan lists as buildable is built.** Phases 0-10 are
 done; 11 (F7, visa checker) and 12 (F10, photo books) are marked "don't build
 until I ask" and have not been started.
 
-**Test counts:** 225 unit (`npm test`), 312 live across ten verifiers
+**Test counts:** 260 unit (`npm test`), 333 live across ten verifiers
 (`scripts/verify-f1|f2|f3|f4|f5|f6|f8|f9|f11|f12.mjs`). `tsc` clean, bundle
 builds.
 
@@ -30,15 +30,16 @@ The scanner launches, but no passport has been read. `lib/scan.ts` handles three
 possible ML Kit result shapes and has never seen real output. This needs a
 physical phone; an emulator webcam is not a fair test.
 
-**What is stubbed rather than missing.** Three integrations have no vendor, and
-in each case the seam is real and the behaviour around it is written for the
+**What is stubbed rather than missing.** Two integrations still have no vendor,
+and in each case the seam is real and the behaviour around it is written for the
 state we are actually in rather than the state we want:
 - **Email delivery (F2).** Reminders are recorded as owed with `sent` false.
   Configuring a provider flushes the backlog.
-- **Booking extraction (F5).** Forwarded mail is recorded and left `pending`,
-  body kept, so it is read the day an Anthropic key is set. The in-app path
-  answers 501 with `EXTRACTION_UNAVAILABLE`, which the app shows as "not
-  switched on yet" rather than as an error.
+- ~~Booking extraction (F5).~~ **No longer stubbed, and no longer needs a
+  vendor at all** as of 2026-09-07. Confirmations are read from their own
+  schema.org markup, a calendar attachment, or patterns — in that order, with
+  the tier reported. `ANTHROPIC_API_KEY` is an optional extra that only ever
+  sees text the parser could not read.
 - **Purchases (F8).** Tier enforcement is real and server-side; there is no way
   to buy anything. `stubEntitlementProvider` in `lib/subscription.ts` is the
   seam RevenueCat fills.
@@ -69,6 +70,79 @@ works from the app and the verification scripts can run. This is a real hole —
 anyone can register under an address they do not own — and must go back on
 before real users. It has flipped several times; check rather than assume:
 `curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings`
+
+---
+
+## 2026-09-07 — F5 no longer needs an AI API key
+
+The Anthropic key was the top item on the "needs you" list. It is now optional,
+and nothing in the app requires an AI provider at all.
+
+**The reasoning is F1's, applied a second time.** F1 moved on-device because an
+MRZ is a fixed-width string with check digits, so once the characters are read
+the parse is arithmetic. A booking confirmation looks like the opposite —
+arbitrary prose, hundreds of vendors — and that is why the feature plan kept the
+Claude API for it, and why I built it that way first.
+
+That was the wrong read. **Most real confirmations are not prose to a machine.**
+They carry structured data deliberately, because the airline or hotel wants
+software to read them: schema.org JSON-LD in the HTML body (Google's email
+markup spec — `FlightReservation`, `LodgingReservation`, `RentalCarReservation`),
+and very often an `.ics` attachment as well. That is an exact machine-readable
+payload sitting inside a human-readable message. It is the MRZ of email, and I
+had been sending it to a model to be guessed at.
+
+**Extraction is now tiered, and the tier is reported:**
+1. **schema.org markup** — exact, high confidence
+2. **`.ics` attachment** — exact times, still reported low because the type and
+   provider come from free text
+3. **patterns** — flight numbers, labelled record locators, long-form dates,
+   money owed. Always LOW confidence, and the receipt says so.
+4. **the model**, only if a key exists, and only on what tier 3 could not read
+
+The model is behind the parser, never in front of it, so an exact answer is
+never replaced by an inferred one.
+
+**The webhook was throwing away the best part of every email.** It read only the
+plain-text part. All of the markup lives in the HTML part, which was being
+discarded. It now carries HTML and any calendar attachment through.
+
+**Path A no longer touches the network.** `lib/bookingParse` is pure, so a
+photographed confirmation is OCR'd with the ML Kit already shipped for F1 and
+parsed on the device. Only text the parser cannot read goes to the server, and
+only because the optional key must never sit in the app bundle.
+
+**A bug the live run caught that the unit tests did not.** The sender's domain
+counted as a provider, and a provider was enough to qualify a message as a
+booking — so "Summer sale! Save 30% on beach holidays" from an airline became a
+trip item. Every promotional email an airline sends would have. Evidence that
+something IS a booking must now come from the message: a reference, a date, or a
+provider the text actually names. The sender's domain is enrichment applied
+afterwards, never evidence. Both cases are now unit tests and a live check.
+
+**Deliberately not supported: numeric dates like 03/04/2027.** That is 3 April
+to most of the world and 4 March in the United States, and nothing in an email
+reliably says which. A booking silently moved by a month is worse than a blank
+field somebody fills in.
+
+**What this does not do.** A badly-worded confirmation from a small vendor that
+ships neither markup nor a calendar file lands on the pattern tier, and may come
+back with two of five fields. That is the same place a failed model call would
+have left it, and the form is pre-filled with whatever was found rather than
+empty. A printed confirmation scanned with the camera always lands there too,
+since paper carries no markup.
+
+**Consequences for what was written before:**
+- `inbound_emails.status = 'pending'` no longer means "waiting for a provider to
+  be configured". Every message is read on arrival, so it now means in flight.
+  The wording changed with it.
+- There is no `EXTRACTION_UNAVAILABLE` state any more. The extract action either
+  reads the booking or says the text was not one.
+- `verify-f5` used to assert a message was parked unread, and a 501. Both were
+  correct then and wrong now; both were rewritten, and the run went from 45 to
+  66 checks.
+
+34 unit tests on the parser alone, with fixtures shaped like real confirmations.
 
 ---
 

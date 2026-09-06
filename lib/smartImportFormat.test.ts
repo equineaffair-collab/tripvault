@@ -178,10 +178,21 @@ describe('suggesting a trip', () => {
 });
 
 describe('wording', () => {
-  test('the pending state says why nothing has happened', () => {
-    // The honest state today: mail arrives and waits for a provider. Silence
-    // would read as the feature being broken.
-    assert.match(describeInbound('pending'), /not switched on yet/);
+  test('the pending state reads as in-progress, not as broken', () => {
+    // Extraction runs on arrival now, so a message sitting here is one still
+    // being processed. It used to say "not switched on yet", which was true
+    // when a model was required and is not any more.
+    assert.match(describeInbound('pending'), /still being read/);
+  });
+
+  test('an extracted message can say how it was read', () => {
+    // Whether a booking came from the airline's own markup or from a guess at
+    // the wording is the single most useful thing to tell someone checking it.
+    assert.equal(
+      describeInbound('extracted', 'Read from the booking data in the email (json-ld).'),
+      'Read from the booking data in the email (json-ld).'
+    );
+    assert.match(describeInbound('extracted'), /added to your bookings/);
   });
 
   test('a tier refusal says the email was kept', () => {

@@ -186,7 +186,7 @@ export type InboundStatus = 'pending' | 'extracted' | 'unreadable' | 'rejected_t
 export function describeInbound(status: InboundStatus, detail?: string | null): string {
   switch (status) {
     case 'extracted':
-      return 'Read and added to your bookings.';
+      return detail || 'Read and added to your bookings.';
     case 'unreadable':
       return detail || "This didn't look like a booking confirmation, so nothing was added.";
     case 'rejected_tier':
@@ -194,9 +194,10 @@ export function describeInbound(status: InboundStatus, detail?: string | null): 
     case 'failed':
       return detail || 'Something went wrong reading this one. It has been kept, so it can be retried.';
     default:
-      // The state this project is actually in: mail arrives, is stored, and
-      // waits for an extraction provider to be configured.
-      return 'Received. Waiting to be read — booking extraction is not switched on yet.';
+      // Every message is read the moment it arrives now, so 'pending' means a
+      // message that is still in flight or one whose processing stopped partway
+      // -- not, as it used to, one waiting for a provider that was never set up.
+      return 'Received, still being read.';
   }
 }
 

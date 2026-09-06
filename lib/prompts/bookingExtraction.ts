@@ -4,7 +4,8 @@
  * Kept as its own file per the project conventions, so it can be read and
  * revised without opening the function that sends it.
  *
- * This is the one place the Claude API is still used. F1's passport extraction
+ * Used ONLY by the optional model fallback, and only for text lib/bookingParse
+ * could not read. Most confirmations never reach it. F1's passport extraction
  * moved on-device because an MRZ is a fixed-width string with check digits; a
  * booking confirmation is genuinely unstructured prose in an arbitrary layout,
  * which is the case a language model is actually for.

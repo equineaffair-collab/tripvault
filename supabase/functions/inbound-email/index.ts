@@ -111,18 +111,14 @@ Deno.serve(async (req: Request) => {
     return new Response('Could not record.', { status: 500 });
   }
 
-  await processMessage(admin, {
-    inboundId: record.id as string,
-    userId,
-    text: message.text ?? '',
-  });
+  await processMessage(admin, { inboundId: record.id as string, userId, message });
 
   return ok();
 });
 
 async function processMessage(
   admin: SupabaseClient,
-  args: { inboundId: string; userId: string; text: string }
+  args: { inboundId: string; userId: string; message: InboundMessage }
 ): Promise<void> {
   const finish = (status: string, detail: string | null, tripItemId: string | null = null) =>
     admin
@@ -144,20 +140,24 @@ async function processMessage(
     return;
   }
 
-  if (!args.text.trim()) {
-    await finish('unreadable', 'The message had no readable text.');
+  const { text, html, ics, subject, from } = args.message;
+
+  if (!text?.trim() && !html?.trim() && !ics?.trim()) {
+    await finish('unreadable', 'The message had no readable content.');
     return;
   }
 
-  const outcome = await extractBooking(args.text);
-
-  if (outcome.status === 'unconfigured') {
-    // Left as 'pending' on purpose. This is the state the project is actually
-    // in, and a message parked here is one that gets read the day a key is
-    // configured, rather than one that was marked failed and forgotten.
-    await finish('pending', outcome.detail);
-    return;
-  }
+  // The HTML part is passed through deliberately: schema.org booking markup
+  // lives there and nowhere else, and it is the one source that needs no
+  // guessing at all. Reading only the plain-text part would throw away the
+  // best answer in the message.
+  const outcome = await extractBooking({
+    text,
+    html,
+    ics,
+    subject,
+    fromAddress: from,
+  });
 
   if (outcome.status !== 'extracted') {
     await finish(outcome.status === 'unreadable' ? 'unreadable' : 'failed', outcome.detail);
@@ -193,9 +193,13 @@ async function processMessage(
     return;
   }
 
+  // The method is recorded in the detail, so a wrong item can be traced back
+  // to how it was read rather than guessed at later.
   await finish(
     'extracted',
-    b.confidence === 'low' ? 'Some of this was a guess — worth checking.' : null,
+    b.confidence === 'low'
+      ? `Read from the wording of the email (${outcome.method}) — worth checking.`
+      : `Read from the booking data in the email (${outcome.method}).`,
     item.id as string
   );
 }
@@ -209,6 +213,10 @@ type InboundMessage = {
   from: string | null;
   subject: string | null;
   text: string | null;
+  /** The HTML part, which is where schema.org booking markup lives. */
+  html: string | null;
+  /** A calendar attachment, if the provider gave us one already decoded. */
+  ics: string | null;
 };
 
 /**
@@ -220,12 +228,14 @@ function normaliseMessage(payload: Record<string, unknown>): InboundMessage {
     typeof v === 'string' && v.trim() ? v.trim() : null;
 
   // Postmark
-  if (payload.OriginalRecipient || payload.FromFull || payload.TextBody) {
+  if (payload.OriginalRecipient || payload.FromFull || payload.HtmlBody || payload.TextBody) {
     return {
       to: str(payload.OriginalRecipient) ?? str(payload.To),
       from: str(payload.From),
       subject: str(payload.Subject),
       text: str(payload.TextBody) ?? str(payload.StrippedTextReply),
+      html: str(payload.HtmlBody),
+      ics: calendarAttachment(payload.Attachments),
     };
   }
 
@@ -235,7 +245,38 @@ function normaliseMessage(payload: Record<string, unknown>): InboundMessage {
     from: str(payload.sender) ?? str(payload.from),
     subject: str(payload.subject) ?? str(payload.Subject),
     text: str(payload['stripped-text']) ?? str(payload['body-plain']),
+    html: str(payload['stripped-html']) ?? str(payload['body-html']),
+    ics: null,
   };
+}
+
+/**
+ * The .ics part of a Postmark payload, decoded.
+ *
+ * Attachments arrive base64 encoded. A calendar file is small and plain text,
+ * so decoding one costs nothing; anything else is left alone -- this function
+ * exists to read a booking, not to open attachments.
+ */
+function calendarAttachment(attachments: unknown): string | null {
+  if (!Array.isArray(attachments)) return null;
+
+  for (const raw of attachments) {
+    const a = raw as Record<string, unknown>;
+    const name = String(a.Name ?? '');
+    const type = String(a.ContentType ?? '');
+    const isCalendar = /\.ics$/i.test(name) || /text\/calendar/i.test(type);
+    if (!isCalendar || typeof a.Content !== 'string') continue;
+
+    try {
+      return new TextDecoder().decode(
+        Uint8Array.from(atob(a.Content), (c) => c.charCodeAt(0))
+      );
+    } catch {
+      // A malformed attachment must not lose the message it came with.
+      return null;
+    }
+  }
+  return null;
 }
 
 /* --------------------------------------------------------------------------

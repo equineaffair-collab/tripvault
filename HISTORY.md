@@ -8,24 +8,42 @@ unproven. Read the Current state section first.
 
 ## Current state
 
-*As of 2026-09-05.*
+*As of 2026-09-06.*
 
-**Built and verified against the live Supabase project:**
-- **Phase 0** — Expo SDK 57 / RN 0.86 / TypeScript strict. Email+password auth,
-  three-tab shell.
-- **Phase 1 (F11)** — traveler profiles. 19/19 live checks pass.
-- **Phase 2 (F1)** — document vault storage, encryption, Edge Function, guardian
-  gate, audit log. 23/23 live checks pass.
+**Every phase the build plan lists as buildable is built.** Phases 0-10 are
+done; 11 (F7, visa checker) and 12 (F10, photo books) are marked "don't build
+until I ask" and have not been started.
 
-**Verified running on a device (Android emulator):** sign-up, log-in, traveler
-profiles including the minor badge, the traveler picker, empty states, and
-session persistence across a full app restart — which is the real proof the
-chunked SecureStore adapter works.
+**Test counts:** 220 unit (`npm test`), 307 live across ten verifiers
+(`scripts/verify-f1|f2|f3|f4|f5|f6|f8|f9|f11|f12.mjs`). `tsc` clean, bundle
+builds.
 
-**Still unverified, and the main open risk:** the scan path end to end. The
-scanner launches, but no passport has been read. `lib/scan.ts` handles three
+**Verified running on a device (Android emulator):** Phases 0-8's screens.
+Phases 9 and 10 are verified against the live database but have NOT been run on
+a device yet — that is the largest untested surface right now.
+
+**Still unverified, and the main open risk:** the passport scan path end to end.
+The scanner launches, but no passport has been read. `lib/scan.ts` handles three
 possible ML Kit result shapes and has never seen real output. This needs a
 physical phone; an emulator webcam is not a fair test.
+
+**What is stubbed rather than missing.** Three integrations have no vendor, and
+in each case the seam is real and the behaviour around it is written for the
+state we are actually in rather than the state we want:
+- **Email delivery (F2).** Reminders are recorded as owed with `sent` false.
+  Configuring a provider flushes the backlog.
+- **Booking extraction (F5).** Forwarded mail is recorded and left `pending`,
+  body kept, so it is read the day an Anthropic key is set. The in-app path
+  answers 501 with `EXTRACTION_UNAVAILABLE`, which the app shows as "not
+  switched on yet" rather than as an error.
+- **Purchases (F8).** Tier enforcement is real and server-side; there is no way
+  to buy anything. `stubEntitlementProvider` in `lib/subscription.ts` is the
+  seam RevenueCat fills.
+
+**Credentials now on this machine** (all gitignored, none committed):
+`scripts/.service-key` (fetched 2026-09-06 through the already-authenticated
+Supabase CLI, which unblocked the tier-gated verifiers), `scripts/.sweep-secret`,
+`scripts/.inbound-secret`.
 
 **Dev build:** Android development APK built 2026-09-05, in `build-artifacts/`
 (gitignored). EAS project `@blackbirdzz-property/tripvault`. Rebuild only when
@@ -38,18 +56,180 @@ emulator and the Android 35 **Google Play** system image. AVD is a Pixel 7 named
 `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd tripvault -camera-back webcam0`
 then `adb reverse tcp:8081 tcp:8081` and `npx expo start --dev-client`.
 
-**Not started:** Phases 3–10. Phase 8 (F6) is additionally blocked on
-`tripvault-entry-requirements-starter.md`, which does not exist — the setup doc
-flags those IATA lookups as manual research.
-
-**Test counts:** 55 unit (`npm test`), 42 live (`scripts/verify-f1.mjs`,
-`scripts/verify-f11.mjs`).
+**Emulator quirk, seen twice:** after a crash the clock drifts and Supabase
+rejects the token with "JWT issued at future". It looks like an auth bug and is
+not one. Fix: `adb shell settings put global auto_time 0` then `1`, wait a few
+seconds, restart the app.
 
 **Email confirmation: currently OFF** (`mailer_autoconfirm: true`), so sign-up
-works from the app and both verification scripts can run. This is a real hole —
-anyone can register under an address they do not own — and must go back on before
-real users. It has flipped several times; check rather than assume:
+works from the app and the verification scripts can run. This is a real hole —
+anyone can register under an address they do not own — and must go back on
+before real users. It has flipped several times; check rather than assume:
 `curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings`
+
+---
+
+## 2026-09-06 — Phase 9 (F5): smart import, minus the vendors
+
+45 live checks (`scripts/verify-f5.mjs`), 32 unit tests. Both paths are built;
+only the extraction call itself is absent, and it is a seam rather than a stub.
+
+**The decision worth recording is what to do with mail that cannot be read
+yet.** No Anthropic key is configured, so the choice was between failing the
+webhook, dropping the message, or keeping it. It is kept: recorded before
+extraction is attempted, left `pending` with its body stored, so the day a key
+is set the backlog gets read rather than having been marked failed and
+forgotten. Same trade F2 makes by writing a reminder as owed before it can be
+delivered. The verifier asserts exactly this, so if someone later "fixes" it by
+marking such mail failed, a test breaks.
+
+**A lapsed plan holds mail rather than dropping it** (`rejected_tier`), and the
+forwarding address survives a downgrade — so upgrading again does not mean
+re-sharing a new address with everyone who has the old one.
+
+**Mail for an address nobody has is counted and dropped, never stored.** There
+is no user to own the row, and keeping the content of unsolicited mail sent to a
+non-existent address would mean collecting messages from and about people who
+have no relationship with this app. The webhook answers 200 so the provider
+stops retrying: this was handled, not failed.
+
+**Deviation from the feature plan, on purpose.** The plan illustrates a
+forwarding address as `janette-8f3k@trips.tripvaultapp.com`. The name half is
+dropped. The address travels in mail headers, through spam filters and along
+forwarded chains, so a readable name leaks the account holder to everyone who
+handles the message — and buys nothing, because the app shows the address with a
+copy button rather than asking anyone to recognise it. It is `tv` plus 24 random
+characters.
+
+**The webhook fails closed.** With no signing secret configured it rejects
+everything, rather than accepting a message claiming to come from any user's
+address. Postmark does not sign inbound webhooks, so that path compares a shared
+secret in constant time; Mailgun's HMAC is verified with a five-minute window,
+so a captured request cannot be replayed indefinitely.
+
+**Trip suggestion suggests and never assigns**, and stays silent when two trips
+overlap. The feature plan raises auto-assignment as an open question; the answer
+here is that a booking filed under the wrong trip is worse than one sitting in a
+holding area, because nobody goes looking for it. The user taps once either way;
+only the failure modes differ.
+
+**Checkpoint — needs you:**
+- **An Anthropic API key** (`supabase secrets set ANTHROPIC_API_KEY=...`).
+  Until then nothing is extracted from anything, by either path.
+- **The inbound domain and provider** — the same Postmark/Mailgun account F2
+  needs. Set `INBOUND_EMAIL_DOMAIN` and point inbound parsing at the
+  `inbound-email` function, passing the shared secret as `?secret=` or the
+  `x-tripvault-secret` header. The domain is deliberately left unset rather than
+  pointed at a placeholder, so the app says "mail cannot arrive yet" instead of
+  showing an address that looks like it works.
+
+---
+
+## 2026-09-06 — Phase 10 (F9): family member access
+
+78 live checks (`scripts/verify-f9.mjs`), 21 unit tests. Both mechanisms, fully
+built, nothing blocked on anyone.
+
+**The two mechanisms are kept apart by the shape of the schema, not by
+discipline.** The prompt asks for two security models rather than one path with
+a branch in it, so they get separate tables, separate policies, separate Edge
+Functions, separate client modules and separate screens.
+- The **linked login** is granted by RLS, and every policy is `FOR SELECT`. So
+  read-only is structural: there is no write policy to weaken, and the feature
+  plan's open question ("should they tick off checklist items?") stays answered
+  as no until someone deliberately adds one, which is a visible act.
+- The **share link** has no RLS path at all. `anon` gets no policy anywhere, so
+  a recipient can only read through one function — which keeps "documents only
+  if the organizer turned them on" a single branch in a single place.
+
+**A linked family member gets a different app, not the same app with buttons
+hidden.** RootNavigator decides which, so nothing below has to ask whether it is
+allowed to write.
+
+**The hole I closed while building it.** `travelers.linked_auth_user_id` was
+writable by the profile's owner under the existing update policy, which meant an
+organizer could write any uuid into it by direct API call and walk straight past
+the tier gate, the child rule and the invite itself. Now only the service role
+can SET it — a client can still CLEAR it, because revoking access must never be
+the operation that depends on a server being reachable. The verifier attacks
+this directly and then checks the column, not just the response.
+
+**A profile marked as a child cannot be given its own login.** This is my call,
+not the feature plan's. The plan describes the mechanism for "a husband, a son";
+handing a child their own account holding their own passport is a different
+product with a different regulatory footprint, and the plan already flags the
+Australian Children's Online Privacy Code (register by 10 December 2026) as
+applying to this app. Refusing is trivially reversible if it is not what you
+want; discovering child accounts already exist is not. Enforced in a trigger, so
+a direct API call cannot skip it.
+
+**A linked member sees only their own traveler row**, not their co-attendees'.
+The feature plan singles out `is_minor` as a sensitive signal that should not
+reach a linked member beyond their own scope, and another attendee's profile is
+outside that scope.
+
+**A share recipient never gets a document number, at any setting.** The scan is
+what an emergency contact actually needs, and handing an unauthenticated
+bearer-token holder a passport number in plain text is the exact use APP 9 warns
+about. It also means `shared-trip` never needs DOCUMENT_ENCRYPTION_KEY, so the
+key still lives in exactly one function.
+
+**Tokens are stored as SHA-256 hashes**, both the invite code and the share
+token. A leaked backup must not yield working links. Neither can be looked up
+again — only replaced — and the verifier checks no plaintext column exists.
+
+**The share link renders its own page.** There is no web front end, and a link
+nobody can open is not a link, so `shared-trip` answers GET with a small
+server-rendered HTML page: no scripts, no external assets, `no-store`,
+`noindex`. A recipient is by definition someone we know nothing about, on a
+device we know nothing about, quite possibly on airport wifi.
+
+**Rate limited on failures per caller.** A 256-bit token is not guessable, but
+"not guessable" is an argument, and an unauthenticated endpoint that will answer
+an unlimited number of questions is worth closing anyway. The caller's address
+is stored as a hash — rate limiting needs equality and nothing else.
+
+---
+
+## 2026-09-06 — Two verifiers that were passing for the wrong reason
+
+Both found by the same thing: having the service role key, which made checks
+possible that had previously only been written as though they were happening.
+
+**F12's orphan sweep never verified anything.** It queried each table as a
+*second signed-in account* and asserted no rows came back. With RLS on, a second
+account sees no rows whether the data was deleted or not — so every assertion in
+that section passed regardless of the answer, and would have passed on a build
+where deletion did nothing at all. It now queries with the service role, which
+genuinely bypasses RLS, and skips with a visible notice when the key is absent
+rather than reporting a pass it did not earn.
+
+This is the second instance of this exact mistake (verify-f6 had it too, caught
+on 2026-09-05). Worth assuming there is a third somewhere: the tell is an
+assertion that something is *absent*, checked through a client that could not
+have seen it either way.
+
+**The rewritten sweep immediately found a real gap.** Phases 9 and 10 added four
+tables that nothing was checking, and F12's export did not include them either.
+Both fixed; the export is now `tripvault-export-v2`, and token hashes are
+deliberately excluded from it — the fingerprint of a live credential is useless
+to the person exporting and one more place it exists if the file goes astray.
+
+**The audit log has to be captured before deletion, not after.** Both of
+`document_access_log`'s foreign keys are ON DELETE SET NULL, so once an account
+is gone there is nothing left on the row pointing back at the document or the
+actor. That is correct and deliberate — the record that access occurred outlives
+both — but it means the row cannot be found by either afterwards. The verifier
+now reads the ids first and checks by id, and asserts what survives is the
+action and the timestamp with both identities nulled.
+
+**The service role key was fetched rather than supplied.** `supabase projects
+api-keys` returns it and the CLI was already signed in, so a checkpoint that had
+been waiting on you did not need to be. It is in `scripts/.service-key`,
+gitignored. Worth knowing: the value passed through a Claude Code session
+transcript. It was already retrievable by anyone with that dashboard or CLI
+session, so this changes little in practice — but rotate it if that is not
+acceptable.
 
 ---
 
@@ -272,11 +452,18 @@ cascade, so a passport scan would otherwise outlive the account that owned it.
 SET NULL, so the record that access occurred outlives the account — which is the
 point of an audit log, and the opposite of what a cascade would do.
 
-**Checkpoint — needs you:** the Chrome extension became unresponsive mid-session
+**Correction, 2026-09-06 — the claim below was wrong.** It says the API-level
+orphan check passed and the direct SQL audit was only added rigour. In fact the
+API-level check could not fail: it ran as a second signed-in account, and RLS
+returns no rows to that account whether or not the data survived. Nothing about
+deletion was verified until 2026-09-06, when the section was rewritten to query
+with the service role. See that day's entry. The original text follows.
+
+~~**Checkpoint — needs you:** the Chrome extension became unresponsive mid-session
 (a wedged "unsaved changes" dialog in the Supabase SQL editor), so the direct SQL
 orphan audit could not be run. The API-level check passed and the cascades are
 FK-enforced, so this is added rigour rather than a gap. `scripts/audit-orphans.sql`
-holds the query to paste in when the browser is usable again.
+holds the query to paste in when the browser is usable again.~~
 
 **Checkpoint — needs approval:** saving an export to a real file needs
 `expo-file-system` and `expo-sharing`. Until those are approved the export screen

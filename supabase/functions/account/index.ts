@@ -111,13 +111,40 @@ async function handleExport(
     );
   }
 
-  const [travelers, trips, tripItems, checklist, loyalty, documents] = await Promise.all([
+  const [
+    travelers,
+    trips,
+    tripItems,
+    checklist,
+    loyalty,
+    documents,
+    // Added by Phases 9 and 10. F12 says the package covers everything the
+    // account holds, so a new table is not optional here — one that gets
+    // created and never added is how an export quietly stops being complete.
+    inboundEmails,
+    forwarding,
+    shareLinks,
+    invites,
+  ] = await Promise.all([
     admin.from('travelers').select('*').eq('user_id', userId),
     admin.from('trips').select('*').eq('user_id', userId),
     admin.from('trip_items').select('*').eq('user_id', userId),
     admin.from('trip_checklist_items').select('*, trips!inner(user_id)').eq('trips.user_id', userId),
     admin.from('loyalty_programs').select('*, travelers!inner(user_id)').eq('travelers.user_id', userId),
     admin.from('documents').select('*, travelers!inner(user_id)').eq('travelers.user_id', userId),
+    admin.from('inbound_emails').select('*').eq('user_id', userId),
+    admin.from('forwarding_addresses').select('local_part, created_at, rotated_at').eq('user_id', userId),
+    // token_hash is deliberately omitted from both. It is the fingerprint of a
+    // live credential: useless to the person exporting, and one more place the
+    // hash exists if the file goes astray.
+    admin
+      .from('share_links')
+      .select('id, trip_id, label, includes_documents, revoked, created_at, expires_at')
+      .eq('created_by', userId),
+    admin
+      .from('traveler_invites')
+      .select('id, traveler_id, created_at, expires_at, accepted_at')
+      .eq('created_by', userId),
   ]);
 
   const key = await importKey(encryptionKey);
@@ -142,7 +169,9 @@ async function handleExport(
 
   return json({
     export: {
-      format: 'tripvault-export-v1',
+      // v2 because the shape changed when F5 and F9 landed. A version that
+      // stays still while the contents grow is worse than no version at all.
+      format: 'tripvault-export-v2',
       generated_at: new Date().toISOString(),
       account: { id: userId, email: (await admin.auth.admin.getUserById(userId)).data.user?.email },
       travelers: travelers.data ?? [],
@@ -151,6 +180,10 @@ async function handleExport(
       trip_items: tripItems.data ?? [],
       trip_checklist_items: strip(checklist.data),
       loyalty_programs: strip(loyalty.data),
+      inbound_emails: inboundEmails.data ?? [],
+      forwarding_addresses: forwarding.data ?? [],
+      share_links: shareLinks.data ?? [],
+      traveler_invites: invites.data ?? [],
     },
   });
 }

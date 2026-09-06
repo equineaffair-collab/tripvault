@@ -97,8 +97,30 @@ loyalty_programs (F4): id, traveler_id, type, provider_name,
 reminders (F2): id, ref_type, ref_id, remind_at, channel, sent
 entry_requirements (F6): country, min_passport_validity_months, verified,
   last_verified, notes
-share_links (F9, secondary mechanism): id, trip_id, token, created_at,
-  expires_at, revoked, includes_documents
+traveler_invites (F9, primary mechanism): id, traveler_id, created_by,
+  token_hash, created_at, expires_at, accepted_at, accepted_by
+  - token_hash, not token: the invite code is a bearer credential and is stored
+    as SHA-256 only. It is shown once and cannot be looked up again.
+  - travelers.linked_auth_user_id is writable ONLY by the service role, after a
+    real invite is redeemed. A client can clear it (revocation must never need
+    a server) but never set it. Do not add a policy that changes this.
+share_links (F9, secondary mechanism): id, trip_id, created_by, token_hash,
+  label, created_at, expires_at, revoked, includes_documents
+  - `anon` has NO policy on this or any table F9 touches. A share recipient
+    reads exclusively through the `shared-trip` Edge Function, which is what
+    keeps "documents only if the organizer turned them on" one branch in one
+    place instead of a policy someone can weaken.
+share_link_attempts (F9): rate limiting for the anonymous endpoint. RLS on with
+  no policies at all -- service role only, in both directions.
+forwarding_addresses (F5): user_id, local_part, created_at, rotated_at
+  - The address IS the access control for inbound mail, so it is a credential:
+    minted server-side from a CSPRNG, never client-chosen, never enumerable
+    (no INSERT/UPDATE policy, SELECT scoped to your own row), and replaceable.
+inbound_emails (F5): id, user_id, from_address, subject, received_at, status,
+  detail, trip_item_id, body_text
+  - Mail is recorded BEFORE extraction is attempted and left 'pending' when no
+    provider is configured, so nothing is lost and the backlog is read the day
+    a key is set. Mail for an address nobody has is dropped, never stored.
 photos (F10, future): id, trip_id, trip_item_id (nullable), file_url,
   taken_at, caption
 

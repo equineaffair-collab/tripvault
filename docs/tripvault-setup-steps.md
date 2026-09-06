@@ -2,11 +2,21 @@
 
 Things Claude Code can't do for you — accounts, credentials, and decisions that need to exist before or during the phase that needs them. Organized in the order you'll actually hit them, matching the phases in `tripvault-claude-code-prompts.md`.
 
+## Status, 2026-09-06
+
+Phases 0-10 are built. Everything below that is still unticked is genuinely
+waiting on you; nothing else is. `HISTORY.md` has the reasoning for each.
+
 ## Before Phase 0
-- [ ] Create a Supabase project — get the URL, anon key, and service role key.
-- [ ] Get an Anthropic API key for the Claude API calls (F1's document extraction, F5's booking extraction).
+- [x] Create a Supabase project — get the URL, anon key, and service role key.
+      *(Done. The service role key was fetched from the authenticated CLI on
+      2026-09-06 and is in `scripts/.service-key`, gitignored.)*
+- [ ] Get an Anthropic API key — **now only needed for F5's booking extraction.**
+      F1's document extraction moved on-device on 2026-09-05 and needs no key.
+      Set it with `supabase secrets set ANTHROPIC_API_KEY=...`; until then
+      forwarded mail is stored and left unread rather than lost.
 - [ ] Register a domain if you don't have one yet (needed later for the email subdomain in Phase 3/9).
-- [ ] Create an empty GitHub repository (no README/.gitignore — Claude Code will scaffold those) and have the repo URL ready to hand to Claude Code, so it can connect and push the initial commit as part of Phase 0.
+- [x] Create an empty GitHub repository. *(Done: equineaffair-collab/tripvault.)*
 
 ## Before Phase 3 (F2 — reminders)
 - [ ] Create a Postmark or Mailgun account. Set up a subdomain (e.g. `trips.tripvaultapp.com`) for both outbound transactional email now and inbound parsing later (Phase 9) — one vendor, one piece of DNS setup, covers both.
@@ -15,7 +25,10 @@ Things Claude Code can't do for you — accounts, credentials, and decisions tha
 - [ ] Apple Developer account (for App Store distribution and in-app purchases).
 - [ ] Google Play Developer account (same, for Android).
 - [ ] Create a RevenueCat account, and set up the four products matching the feature plan's tier table: Pro monthly, Pro yearly, Family yearly, Lifetime (one-time, non-consumable). Confirm the actual prices before creating these — the feature plan's figures are illustrative, not final (particularly the Lifetime price — see the feature plan's note on why $79 vs $99–120 matters).
-- [ ] EAS Build set up for creating dev and production builds (needed regardless of subscriptions, since the document scanner plugin from Phase 2 already requires a dev build — worth doing this earlier if Phase 2 is blocked without it).
+- [x] EAS Build set up for dev and production builds. *(Done 2026-09-05. Project
+      `@blackbirdzz-property/tripvault`; the Android keystore was generated in
+      the cloud and lives in the Expo account — losing it means being unable to
+      ship Play updates. Retrieve it with `eas credentials`.)*
 
 ## Before Phase 7 (F12 — data export/deletion)
 - [ ] Decide the exact response-time commitment for export/deletion requests, ideally with legal input — this varies by jurisdiction and the feature plan flags it as unresolved.
@@ -25,9 +38,29 @@ Things Claude Code can't do for you — accounts, credentials, and decisions tha
 
 ## Before Phase 9 (F5 — email/photo extraction)
 - [ ] Confirm the Postmark/Mailgun inbound-parsing DNS records are live (should already exist from Phase 3's setup).
+- [ ] Point inbound parsing at the `inbound-email` Edge Function and set
+      `INBOUND_EMAIL_DOMAIN` to the receiving subdomain. The function is
+      deployed and verified; it authenticates the provider with the secret in
+      `scripts/.inbound-secret`, passed either as `?secret=<value>` on the
+      webhook URL or as an `x-tripvault-secret` header. Mailgun signs its own
+      webhooks — set `MAILGUN_WEBHOOK_SIGNING_KEY` instead and the HMAC path is
+      used. **The domain is deliberately unset**, so the app currently tells the
+      user mail cannot arrive yet rather than showing an address that looks like
+      it works.
 
 ## Before Phase 10 (F9 — family member access)
 - [ ] Decide whether linked family accounts require MFA (the feature plan's security review raises this as worth considering, given the sensitivity of what they can access).
+      **Built without it**, on the assumption that a v1 linked account is
+      email+password like any other. Worth revisiting: a linked account reads
+      passport scans, and it is the account most likely to belong to someone who
+      is not thinking about security at all.
+- [ ] Decide whether a **child** profile should ever get its own login. Built
+      refusing it, which is my call rather than the feature plan's — see
+      HISTORY.md for the reasoning. Reversing it means deleting one check in
+      `supabase/migrations/0010_family_access.sql`.
+- [ ] Decide whether a linked member should be able to tick off checklist items.
+      The feature plan leans read-only for v1 and that is what is built —
+      structurally, with no write policy at all rather than a hidden button.
 
 ## Development settings to revert before launch
 
@@ -45,6 +78,20 @@ until it goes back. Re-check this list before any build reaches a real user.
   Do this alongside Phase 3's Postmark/Mailgun setup, since you will want your
   own SMTP by then anyway -- Supabase's built-in sender is rate-limited to a
   handful of messages an hour and will throttle real signups.
+
+## Dependencies waiting on your approval
+
+The project convention is to ask before adding a third-party dependency. These
+four are wanted by features that are otherwise built, and each one has a stated
+fallback that is currently in use:
+
+- [ ] `expo-notifications` — F2's push channel. The column and the send path
+      exist; the sweep delivers the moment a device token is stored. Without it,
+      reminders are email-only, and email has no provider yet either.
+- [ ] `expo-file-system` and `expo-sharing` — F12's export currently renders the
+      package as selectable JSON on screen. That works and is not what anyone
+      wants from a data-portability feature.
+- [ ] `@expo/vector-icons` — the tab bar is label-only. Cosmetic.
 
 ## Before launch, regardless of phase
 - [ ] **Legal review of the terms & conditions and security & compliance sections** in `tripvault-feature-plan.md` — treat both as a drafting brief for an actual lawyer, not final text. Flag two things specifically when you do this: the Australian Children's Online Privacy Code (must register by 10 December 2026, and the exposure draft names "family photo sharing applications" as an example of what it covers), and Australian Privacy Principle 9's restriction on using a passport number as an identifier.

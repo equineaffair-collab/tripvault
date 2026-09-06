@@ -24,6 +24,11 @@ export type ExportPackage = {
   trip_items: unknown[];
   trip_checklist_items: unknown[];
   loyalty_programs: unknown[];
+  /** Added in v2, when F5 and F9 landed. Optional so an older package still parses. */
+  inbound_emails?: unknown[];
+  forwarding_addresses?: unknown[];
+  share_links?: unknown[];
+  traveler_invites?: unknown[];
 };
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
@@ -71,6 +76,8 @@ export function describeExport(pkg: ExportPackage): string {
     [pkg.trips.length, 'trip'],
     [pkg.trip_items.length, 'booking'],
     [pkg.loyalty_programs.length, 'loyalty program'],
+    [pkg.share_links?.length ?? 0, 'share link'],
+    [pkg.inbound_emails?.length ?? 0, 'forwarded email'],
   ] as const;
 
   return parts

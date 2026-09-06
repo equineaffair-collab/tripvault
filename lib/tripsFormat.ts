@@ -219,6 +219,22 @@ export function checkPassportValidity(args: {
 }
 
 /** The checklist item text an issue should generate, if any. */
+/**
+ * F6's checklist label, and the pattern that recognises one.
+ *
+ * The pattern exists because these items were first written with source
+ * 'manual' by mistake, which meant they were never deduplicated and never
+ * cleaned up. Matching the label is how the sync adopts those older rows
+ * instead of leaving them to accumulate — see syncEntryRequirementChecklist.
+ */
+export function checklistLabelForEntryIssue(travelerName: string, countryName: string): string {
+  return `Sort out ${travelerName}'s passport for ${countryName}`;
+}
+
+export function looksLikeEntryRequirementItem(label: string): boolean {
+  return /^Sort out .+'s passport for .+$/.test(label.trim());
+}
+
 export function checklistLabelForIssue(issue: ValidityIssue): string {
   switch (issue.kind) {
     case 'no-passport':

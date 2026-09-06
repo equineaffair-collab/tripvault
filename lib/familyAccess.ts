@@ -125,13 +125,14 @@ export type InvitableTraveler = TravelerForInvite & { id: string };
 export async function listTravelersForInvites(): Promise<InvitableTraveler[]> {
   const { data, error } = await supabase
     .from('travelers')
-    .select('id, name, is_minor, linked_auth_user_id')
+    .select('id, name, relationship, is_minor, linked_auth_user_id')
     .order('name', { ascending: true });
 
   if (error) throw new Error(error.message);
   return (data ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string,
     name: r.name as string,
+    relationship: r.relationship as string,
     isMinor: Boolean(r.is_minor),
     linkedAuthUserId: (r.linked_auth_user_id as string | null) ?? null,
   }));

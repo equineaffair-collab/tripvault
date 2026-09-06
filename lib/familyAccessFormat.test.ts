@@ -91,6 +91,27 @@ describe('why an invite is refused', () => {
     assert.match(String(reason), /your own account/i);
   });
 
+  test("your own profile is refused, because you already see everything", () => {
+    // Not a database rule: 'self' is a label the account holder picked. But
+    // offering it is nonsense, and the invite would only be redeemable by
+    // somebody else.
+    const reason = inviteBlockReason({
+      tier: 'family',
+      traveler: { name: 'Janette', isMinor: false, linkedAuthUserId: null, relationship: 'self' },
+    });
+    assert.match(String(reason), /your own profile/i);
+  });
+
+  test('any other relationship is fine', () => {
+    for (const relationship of ['partner', 'child', 'other', undefined]) {
+      const reason = inviteBlockReason({
+        tier: 'family',
+        traveler: { name: 'Sam', isMinor: false, linkedAuthUserId: null, relationship },
+      });
+      assert.equal(reason, null, String(relationship));
+    }
+  });
+
   test('an already-linked profile is refused', () => {
     const reason = inviteBlockReason({
       tier: 'family',

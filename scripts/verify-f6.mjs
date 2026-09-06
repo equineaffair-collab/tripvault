@@ -208,6 +208,46 @@ console.log('\nUnknown destinations');
   check('an unknown destination returns nothing, not a guess', data === null);
 }
 
+console.log("\nF6's checklist items cannot duplicate the way they used to");
+{
+  // These were originally written with source 'manual', which excluded them
+  // from the unique index that stops auto items duplicating -- so running the
+  // check twice produced two identical rows, and fixing the passport left both
+  // behind. Only opening a trip that had been checked more than once showed it.
+  // The index is what now makes duplication impossible, so it is what gets
+  // asserted here rather than the app code that relies on it.
+  const { data: trip } = await a
+    .from('trips')
+    .insert({ user_id: aUser.id, name: `F6 checklist ${stamp}`, end_date: '2027-04-14' })
+    .select('id')
+    .single();
+
+  const label = "Sort out Someone's passport for Thailand";
+  const row = (source) => ({ trip_id: trip.id, label, category: 'documents', source });
+
+  const first = await a.from('trip_checklist_items').insert(row('auto-entry-requirement'));
+  check('an entry-requirement item can be added', !first.error, first.error?.message ?? '');
+
+  const second = await a.from('trip_checklist_items').insert(row('auto-entry-requirement'));
+  check(
+    'the same one a second time is refused by the database',
+    Boolean(second.error),
+    second.error?.code ?? 'accepted!'
+  );
+
+  // Manual items stay exempt: two "call the hotel" reminders are the user's
+  // business, and that exemption is exactly what let the old bug through.
+  const m1 = await a.from('trip_checklist_items').insert(row('manual'));
+  const m2 = await a.from('trip_checklist_items').insert(row('manual'));
+  check(
+    'manual items may still repeat, which is why the source matters',
+    !m1.error && !m2.error,
+    m1.error?.message ?? m2.error?.message ?? ''
+  );
+
+  await a.from('trips').delete().eq('id', trip.id);
+}
+
 console.log('\nCleanup');
 {
   await a.from('travelers').delete().eq('user_id', aUser.id);

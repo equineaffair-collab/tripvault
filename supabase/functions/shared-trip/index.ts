@@ -21,6 +21,11 @@
  * This function deliberately does NOT hold DOCUMENT_ENCRYPTION_KEY. A share
  * recipient never sees a decrypted document number; the key stays in exactly
  * one function, which is the property the whole encryption design rests on.
+ *
+ * Note on the page format: Supabase's gateway rewrites an HTML response served
+ * from the default functions domain to `text/plain`, so the recipient page is
+ * plain text by default and HTML only when SHARE_PAGE_FORMAT=html is set --
+ * see the rendering section at the bottom of this file.
  */
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { clientHash, generateToken, hashToken, normaliseToken } from '../_shared/tokens.ts';
@@ -73,7 +78,7 @@ Deno.serve(async (req: Request) => {
   // open is not a share link.
   if (req.method === 'GET') {
     const token = new URL(req.url).searchParams.get('t');
-    return await handleView(admin, req, { token }, 'html');
+    return await handleView(admin, req, { token }, 'page');
   }
 
   let body: Record<string, unknown>;
@@ -170,10 +175,10 @@ async function handleView(
   admin: SupabaseClient,
   req: Request,
   body: Record<string, unknown>,
-  shape: 'json' | 'html'
+  shape: 'json' | 'page'
 ): Promise<Response> {
   const fail = (message: string, status: number) =>
-    shape === 'html' ? htmlError(message, status) : json({ error: message }, status);
+    shape === 'page' ? pageError(message, status) : json({ error: message }, status);
 
   const who = await clientHash(req);
 
@@ -263,7 +268,7 @@ async function handleView(
     payload.documents = await documentsForTrip(admin, trip.id);
   }
 
-  return shape === 'html' ? htmlPage(payload) : json(payload);
+  return shape === 'page' ? renderPage(payload) : json(payload);
 }
 
 /**
@@ -327,10 +332,29 @@ async function documentsForTrip(
 /* --------------------------------------------------------------------------
  * The page a recipient actually sees.
  *
- * Server-rendered, no scripts, no external assets. A share recipient is by
- * definition someone we know nothing about, on a device we know nothing about,
- * quite possibly on airport wifi. Plain HTML always renders.
+ * Two formats, and the reason is a platform constraint found by opening a real
+ * share link rather than by reading docs:
+ *
+ * Supabase's Edge Function gateway REWRITES the Content-Type of any HTML
+ * response served from `<ref>.functions.supabase.co` to `text/plain`, and adds
+ * `X-Content-Type-Options: nosniff` and a `sandbox` CSP. So an HTML page served
+ * from the default domain does not render — the recipient is shown the markup.
+ * That is deliberate on Supabase's part (it stops the shared domain being used
+ * to host phishing pages) and there is no header we can set to opt out.
+ *
+ * So the default is a formatted PLAIN TEXT page, which renders correctly for
+ * everyone today with nothing bought or configured. Set SHARE_PAGE_FORMAT=html
+ * once the functions are behind a custom domain, where our Content-Type is
+ * honoured.
+ *
+ * Both formats are server-rendered with no scripts and no external assets. A
+ * share recipient is by definition someone we know nothing about, on a device
+ * we know nothing about, quite possibly on airport wifi.
  * ----------------------------------------------------------------------- */
+
+function pageFormat(): 'html' | 'text' {
+  return (Deno.env.get('SHARE_PAGE_FORMAT') ?? '').toLowerCase() === 'html' ? 'html' : 'text';
+}
 
 function esc(value: unknown): string {
   return String(value ?? '')
@@ -340,6 +364,15 @@ function esc(value: unknown): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/** Headers a shared trip always carries, whichever format it is in. */
+const PAGE_HEADERS = {
+  // A shared trip is not something to cache anywhere but the reader's own
+  // screen, and never something a search engine should hold.
+  'Cache-Control': 'no-store',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'Referrer-Policy': 'no-referrer',
+};
 
 const PAGE_CSS = `
   :root { color-scheme: light dark; }
@@ -364,28 +397,27 @@ const PAGE_CSS = `
   footer { margin-top: 44px; font-size: .82rem; opacity: .55; }
 `;
 
-function shell(title: string, inner: string, status = 200): Response {
+function htmlShell(title: string, inner: string, status = 200): Response {
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
       `<meta name="viewport" content="width=device-width, initial-scale=1">` +
       `<meta name="robots" content="noindex, nofollow">` +
       `<title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body>${inner}</body></html>`,
-    {
-      status,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        // A shared trip is not something to cache anywhere but the reader's own
-        // screen, and never something a search engine should hold.
-        'Cache-Control': 'no-store',
-        'X-Robots-Tag': 'noindex, nofollow',
-        'Referrer-Policy': 'no-referrer',
-      },
-    }
+    { status, headers: { ...PAGE_HEADERS, 'Content-Type': 'text/html; charset=utf-8' } }
   );
 }
 
-function htmlError(message: string, status: number): Response {
-  return shell('TripVault', `<h1>Sorry</h1><p class="sub">${esc(message)}</p>`, status);
+function textShell(body: string, status = 200): Response {
+  return new Response(body, {
+    status,
+    headers: { ...PAGE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' },
+  });
+}
+
+function pageError(message: string, status: number): Response {
+  return pageFormat() === 'html'
+    ? htmlShell('TripVault', `<h1>Sorry</h1><p class="sub">${esc(message)}</p>`, status)
+    : textShell(`TripVault\n\n${message}\n`, status);
 }
 
 function formatWhen(value: unknown): string {
@@ -403,6 +435,15 @@ const ITEM_LABELS: Record<string, string> = {
   activity: 'Activity',
   other: 'Booking',
 };
+
+const FOOTER =
+  'Shared with you from TripVault. This is a read-only view of one trip — it does not ' +
+  'give access to anything else in the account, and the person who shared it can revoke ' +
+  'this link at any time.';
+
+const DOCUMENT_NOTE =
+  'These links stop working about a minute after this page loaded. Save anything you ' +
+  'need now, or reload the page for fresh ones.';
 
 function htmlPage(payload: Record<string, unknown>): Response {
   const trip = payload.trip as Record<string, unknown>;
@@ -450,9 +491,7 @@ function htmlPage(payload: Record<string, unknown>): Response {
     if (documents.length === 0) {
       out += `<p class="muted">No documents saved for this trip.</p>`;
     } else {
-      out +=
-        `<div class="note">These links stop working about a minute after this page loaded. ` +
-        `Save anything you need now, or reload the page for fresh ones.</div>`;
+      out += `<div class="note">${esc(DOCUMENT_NOTE)}</div>`;
       for (const d of documents) {
         out += `<div class="card"><strong>${esc(d.travelerName)}</strong> — ${esc(d.type)}`;
         if (d.country) out += ` (${esc(d.country)})`;
@@ -467,10 +506,83 @@ function htmlPage(payload: Record<string, unknown>): Response {
     }
   }
 
-  out +=
-    `<footer>Shared with you from TripVault. This is a read-only view of one trip — ` +
-    `it does not give access to anything else in the account, and the person who ` +
-    `shared it can revoke this link at any time.</footer>`;
+  out += `<footer>${esc(FOOTER)}</footer>`;
 
-  return shell(String(trip.name ?? 'Shared trip'), out);
+  return htmlShell(String(trip.name ?? 'Shared trip'), out);
+}
+
+/**
+ * The same trip as plain text.
+ *
+ * Not a fallback in the apologetic sense — it is the format that actually
+ * arrives readable today, so it is what most recipients will see. Laid out to
+ * be legible in a phone browser with no styling at all: short lines, blank
+ * lines between blocks, headings underlined with dashes.
+ */
+function textPage(payload: Record<string, unknown>): Response {
+  const trip = payload.trip as Record<string, unknown>;
+  const items = payload.items as Record<string, unknown>[];
+  const checklist = payload.checklist as Record<string, unknown>[];
+  const documents = payload.documents as Record<string, unknown>[];
+
+  const lines: string[] = [];
+  const heading = (text: string) => {
+    lines.push('', text.toUpperCase(), '-'.repeat(text.length), '');
+  };
+
+  lines.push(String(trip.name ?? 'Shared trip'));
+  lines.push('='.repeat(String(trip.name ?? 'Shared trip').length));
+  if (trip.destination) lines.push(String(trip.destination));
+  const dates = [trip.startDate, trip.endDate].filter(Boolean).join(' - ');
+  if (dates) lines.push(dates);
+
+  heading('Itinerary');
+  if (items.length === 0) {
+    lines.push('Nothing booked yet.');
+  } else {
+    for (const i of items) {
+      const title = ITEM_LABELS[String(i.type)] ?? 'Booking';
+      lines.push(i.provider ? `${title} - ${i.provider}` : title);
+      const when = formatWhen(i.itemDate);
+      if (when) lines.push(`  ${when}`);
+      if (i.confirmationNumber) lines.push(`  Ref ${i.confirmationNumber}`);
+      if (i.notes) lines.push(`  ${i.notes}`);
+      if (i.externalLink) lines.push(`  ${i.externalLink}`);
+      lines.push('');
+    }
+  }
+
+  heading('Checklist');
+  if (checklist.length === 0) {
+    lines.push('Nothing on the list.');
+  } else {
+    for (const c of checklist) {
+      lines.push(`${c.status === 'done' ? '[x]' : '[ ]'} ${c.label}`);
+    }
+  }
+
+  if (payload.includesDocuments) {
+    heading('Documents');
+    if (documents.length === 0) {
+      lines.push('No documents saved for this trip.');
+    } else {
+      lines.push(DOCUMENT_NOTE, '');
+      for (const d of documents) {
+        let line = `${d.travelerName} - ${d.type}`;
+        if (d.country) line += ` (${d.country})`;
+        lines.push(line);
+        if (d.expiryDate) lines.push(`  Expires ${d.expiryDate}`);
+        lines.push(d.fileUrl ? `  ${d.fileUrl}` : '  No scan saved.');
+        lines.push('');
+      }
+    }
+  }
+
+  lines.push('', '-'.repeat(60), FOOTER, '');
+
+  return textShell(lines.join('\n'));
+}
+
+function renderPage(payload: Record<string, unknown>): Response {
+  return pageFormat() === 'html' ? htmlPage(payload) : textPage(payload);
 }

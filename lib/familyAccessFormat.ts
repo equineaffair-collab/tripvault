@@ -52,6 +52,8 @@ export type TravelerForInvite = {
   name: string;
   isMinor: boolean;
   linkedAuthUserId: string | null;
+  /** F11's relationship. Only 'self' changes the answer below. */
+  relationship?: string;
 };
 
 /**
@@ -75,6 +77,13 @@ export function inviteBlockReason(args: {
   }
   if (args.traveler.linkedAuthUserId) {
     return `${args.traveler.name} already has their own login.`;
+  }
+  if (args.traveler.relationship === 'self') {
+    // Not a database rule: 'self' is a label the account holder chose and can
+    // change, so enforcing it in Postgres would be enforcing a preference. But
+    // offering it is nonsense — you cannot invite yourself to your own account,
+    // and the invite would only be redeemable by somebody else.
+    return `This is your own profile. You already see everything in this account.`;
   }
   return null;
 }

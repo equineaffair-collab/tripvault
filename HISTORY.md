@@ -14,13 +14,16 @@ unproven. Read the Current state section first.
 done; 11 (F7, visa checker) and 12 (F10, photo books) are marked "don't build
 until I ask" and have not been started.
 
-**Test counts:** 220 unit (`npm test`), 307 live across ten verifiers
+**Test counts:** 225 unit (`npm test`), 312 live across ten verifiers
 (`scripts/verify-f1|f2|f3|f4|f5|f6|f8|f9|f11|f12.mjs`). `tsc` clean, bundle
 builds.
 
-**Verified running on a device (Android emulator):** Phases 0-8's screens.
-Phases 9 and 10 are verified against the live database but have NOT been run on
-a device yet — that is the largest untested surface right now.
+**Test accounts:** `npm run clean:test-accounts` sweeps the throwaway logins the
+verifiers leave behind. Dry run by default; `-- --delete` to act.
+
+**Verified running on a device (Android emulator):** Phases 0-10's screens.
+Phases 9 and 10 were run on 2026-09-06 and turned up three bugs no test caught —
+see that day's entry.
 
 **Still unverified, and the main open risk:** the passport scan path end to end.
 The scanner launches, but no passport has been read. `lib/scan.ts` handles three
@@ -56,7 +59,7 @@ emulator and the Android 35 **Google Play** system image. AVD is a Pixel 7 named
 `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd tripvault -camera-back webcam0`
 then `adb reverse tcp:8081 tcp:8081` and `npx expo start --dev-client`.
 
-**Emulator quirk, seen twice:** after a crash the clock drifts and Supabase
+**Emulator quirk, seen three times:** after a crash the clock drifts and Supabase
 rejects the token with "JWT issued at future". It looks like an auth bug and is
 not one. Fix: `adb shell settings put global auto_time 0` then `1`, wait a few
 seconds, restart the app.
@@ -66,6 +69,85 @@ works from the app and the verification scripts can run. This is a real hole —
 anyone can register under an address they do not own — and must go back on
 before real users. It has flipped several times; check rather than assume:
 `curl -s -H "apikey: <publishable key>" https://<ref>.supabase.co/auth/v1/settings`
+
+---
+
+## 2026-09-06 — Running Phases 9 and 10 on the emulator
+
+Three real bugs, none of which any test caught, and one of them was a claim in
+yesterday's entry that turned out to be false.
+
+**The share link did not render. At all.** Supabase's Edge Function gateway
+rewrites the Content-Type of an HTML response served from the default
+`<ref>.supabase.co/functions/v1/` domain to `text/plain`, and adds
+`X-Content-Type-Options: nosniff` and a `sandbox` CSP. So a recipient opening a
+share link was shown raw markup. That is deliberate on Supabase's part — it
+stops the shared domain hosting phishing pages — and no header we can set opts
+out of it. JSON responses are unaffected, which is why nothing noticed.
+
+The verifier had asserted the body contained `<!doctype html>`, which was true
+and meaningless. **That is the third time an assertion has passed for the wrong
+reason** (verify-f6, then verify-f12, now this), and the pattern is the same
+every time: checking a proxy for the property instead of the property. It now
+checks that the Content-Type and the body agree — i.e. that a browser will
+render something a person can read — plus the actual response headers.
+
+**Fix:** the page is now formatted PLAIN TEXT by default, which renders
+correctly for everyone today with nothing bought or configured. `SHARE_PAGE_FORMAT=html`
+switches to the HTML version, and should be set once the functions sit behind a
+custom domain where our Content-Type is honoured. Serving the itinerary as text
+is not a consolation prize — it is the format that actually arrives, so it is
+what most recipients will see, and it is laid out to be legible on a phone with
+no styling at all.
+
+**F6's checklist items were being written as `manual`.** They should have been
+`auto-entry-requirement` — a source the type already declared and nothing ever
+wrote. Three consequences, all invisible until a trip had been checked twice:
+they escaped the unique index that stops auto items duplicating, so re-running
+the check appended a second identical row; they were never removed when the
+problem was fixed; and they missed the amber treatment that marks a
+deadline-driven task. The Thailand trip had two duplicate pairs sitting in it.
+
+Fixed with a `syncEntryRequirementChecklist` mirroring F3's. Older rows are
+**adopted** rather than deleted — a manual item whose label matches the
+generated shape is converted to the right source, after which normal stale
+removal handles it. Adoption because the only evidence a row came from the bug
+is its wording, and deleting on the strength of a string match is a bad trade
+when the row might be something the user typed. Verified on the device: the
+Thailand checklist went from 9 items to 7 with the duplicates gone.
+
+**"Give Janette their own access" was offered for the user's own profile.**
+Inviting yourself is nonsense, and the code would only have been redeemable by
+somebody else. Refused in the UI, not the database: `self` is a label the
+account holder picked and can change, so enforcing it in Postgres would be
+enforcing a preference.
+
+**Confirmed working on the device:** the smart import screen with its honest
+"mail cannot arrive yet" wording; the Family tier gate passing; the child
+profile refusal shown *instead of* the button rather than as an error after
+tapping it; a real invite code minted and displayed once; a real share link
+created and then opened from outside the app.
+
+**Missing, and it needs a dependency:** there is no copy button anywhere. The
+invite code and the share URL are `selectable`, which on Android means a long
+press and a drag. Both screens say "copy it now" and then make that awkward.
+`expo-clipboard` fixes it and is not yet approved.
+
+**Housekeeping:** 130 auth users had accumulated, all but one of them verifier
+throwaways. Every verifier deleted its own rows but could not delete the auth
+user, which needs the service role. `npm run clean:test-accounts` sweeps them
+(dry run by default, `--delete` to act) and refuses to touch anything but
+`tv-…@tripvault.local`.
+
+Worth knowing for anything similar: calling `process.exit()` while a Supabase
+client is alive makes Node abort on Windows with a libuv `UV_HANDLE_CLOSING`
+assertion. In a tidy-up script that reads exactly like a crash. Letting Node
+finish on its own exits cleanly.
+
+**Emulator crashed for the third time** during this session, before the run
+started. It is a pattern, not an incident. Restart, then
+`adb shell settings put global auto_time 0` and `1`, or the clock drift shows up
+as `JWT issued at future` and looks like an auth bug.
 
 ---
 

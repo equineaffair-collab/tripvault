@@ -72,6 +72,7 @@ export default function FamilyAccessScreen({ traveler, onBack, onChanged }: Prop
       name: traveler.name,
       isMinor: traveler.is_minor,
       linkedAuthUserId: traveler.linked_auth_user_id,
+      relationship: traveler.relationship,
     },
   });
 

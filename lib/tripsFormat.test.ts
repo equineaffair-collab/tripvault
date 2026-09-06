@@ -7,9 +7,11 @@ import assert from 'node:assert/strict';
 import {
   addMonths,
   checkPassportValidity,
+  checklistLabelForEntryIssue,
   checklistLabelForIssue,
   checklistProgress,
   groupChecklist,
+  looksLikeEntryRequirementItem,
   shouldGroupChecklist,
   sortChecklist,
   type ChecklistItem,
@@ -310,5 +312,34 @@ describe('grouping and progress', () => {
 
   test('progress says something sensible for an empty list', () => {
     assert.equal(checklistProgress([]).label, 'Nothing on the list yet');
+  });
+});
+
+describe("F6's checklist items, and recognising the ones left by an old bug", () => {
+  test('the label names the person and the destination', () => {
+    assert.equal(
+      checklistLabelForEntryIssue('Sam', 'Thailand'),
+      "Sort out Sam's passport for Thailand"
+    );
+  });
+
+  test('a generated label is recognised as one', () => {
+    // These items were once written with source 'manual', so the only evidence
+    // a row came from that bug is its wording. The sync adopts rather than
+    // deletes on the strength of this match, which is why it has to be tight.
+    assert.ok(looksLikeEntryRequirementItem(checklistLabelForEntryIssue('Sam', 'Thailand')));
+    assert.ok(looksLikeEntryRequirementItem("  Sort out Ada's passport for New Zealand  "));
+  });
+
+  test("someone's own note is not mistaken for one", () => {
+    for (const label of [
+      'Sort out travel insurance',
+      "Sort out Sam's passport",
+      'Renew passport for Thailand',
+      'sort out the passport for thailand',
+      '',
+    ]) {
+      assert.equal(looksLikeEntryRequirementItem(label), false, label);
+    }
   });
 });

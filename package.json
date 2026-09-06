@@ -31,7 +31,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "node --test \"lib/**/*.test.ts\" \"supabase/**/*.test.ts\""
+    "test": "node --test \"lib/**/*.test.ts\" \"supabase/**/*.test.ts\"",
+    "clean:test-accounts": "node scripts/clean-test-accounts.mjs"
   },
   "private": true
 }

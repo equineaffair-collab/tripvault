@@ -91,7 +91,15 @@ const viewJson = (token) =>
   }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
 
 const viewHtml = (token) =>
-  fetch(shareUrl(URL_BASE, token)).then(async (r) => ({ status: r.status, body: await r.text() }));
+  fetch(shareUrl(URL_BASE, token)).then(async (r) => ({
+    status: r.status,
+    // The headers matter as much as the body here: the whole point of this
+    // request is what a browser will actually do with the response.
+    contentType: r.headers.get('content-type'),
+    robots: r.headers.get('x-robots-tag'),
+    cacheControl: r.headers.get('cache-control'),
+    body: await r.text(),
+  }));
 
 /**
  * Rate limiting is keyed on the caller's address, so repeated runs from this
@@ -494,11 +502,27 @@ console.log('\nWhat a stranger with the link actually gets');
   check('the amount paid is not shared', !serialised.includes('1234.56'));
   check('and no document number appears anywhere in the payload', !/PA1234567|PB7654321/.test(serialised));
 
-  const html = await viewHtml(plainToken);
-  check('the same link renders a page a recipient can read', html.status === 200 && html.body.includes('<!doctype html>'), `HTTP ${html.status}`);
-  check('the page shows the trip', html.body.includes('F9 shared trip'), '');
-  check('the page has no Documents section', !html.body.includes('>Documents<'), '');
-  check('and asks not to be indexed', html.body.includes('noindex'), '');
+  // The page a recipient opens. The previous version of this asserted the body
+  // contained "<!doctype html>", which passed while the page did NOT render:
+  // Supabase's gateway rewrites an HTML Content-Type from the default functions
+  // domain to text/plain, so the recipient was shown raw markup. What matters
+  // is that the Content-Type and the body agree, so the browser renders
+  // something a person can read — that is what is checked now.
+  const page = await viewHtml(plainToken);
+  const contentType = page.contentType ?? '';
+
+  check('the same link opens for a recipient', page.status === 200, `HTTP ${page.status}`);
+  check('the page shows the trip', page.body.includes('F9 shared trip'), '');
+  check(
+    'the body matches the Content-Type the browser is actually given',
+    contentType.includes('text/html')
+      ? page.body.includes('<!doctype html>')
+      : !page.body.includes('<!doctype html>'),
+    contentType
+  );
+  check('the page carries no Documents section', !/documents/i.test(page.body.split('CHECKLIST')[1] ?? page.body), '');
+  check('and asks not to be indexed', (page.robots ?? '').includes('noindex'), page.robots ?? '');
+  check('and is not cached anywhere', (page.cacheControl ?? '').includes('no-store'), page.cacheControl ?? '');
 }
 
 console.log('\nDocuments, only when explicitly turned on');

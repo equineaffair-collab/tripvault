@@ -38,6 +38,11 @@ waiting on you; nothing else is. `HISTORY.md` has the reasoning for each.
 
 ## Before Phase 9 (F5 — email/photo extraction)
 - [ ] Confirm the Postmark/Mailgun inbound-parsing DNS records are live (should already exist from Phase 3's setup).
+- [ ] A **custom domain for Edge Functions**, if the share link should open as a
+      styled page. Supabase rewrites an HTML Content-Type to `text/plain` on the
+      default functions domain (anti-phishing), so a share link currently
+      renders as formatted plain text — which works for everyone and needs
+      nothing. Behind a custom domain, set `SHARE_PAGE_FORMAT=html`.
 - [ ] Point inbound parsing at the `inbound-email` Edge Function and set
       `INBOUND_EMAIL_DOMAIN` to the receiving subdomain. The function is
       deployed and verified; it authenticates the provider with the secret in
@@ -92,6 +97,9 @@ fallback that is currently in use:
       package as selectable JSON on screen. That works and is not what anyone
       wants from a data-portability feature.
 - [ ] `@expo/vector-icons` — the tab bar is label-only. Cosmetic.
+- [ ] `expo-clipboard` — there is no copy button anywhere. The F9 invite code
+      and share URL are selectable text, which on Android means a long press and
+      a drag, and both screens say "copy it now" before making that awkward.
 
 ## Before launch, regardless of phase
 - [ ] **Legal review of the terms & conditions and security & compliance sections** in `tripvault-feature-plan.md` — treat both as a drafting brief for an actual lawyer, not final text. Flag two things specifically when you do this: the Australian Children's Online Privacy Code (must register by 10 December 2026, and the exposure draft names "family photo sharing applications" as an example of what it covers), and Australian Privacy Principle 9's restriction on using a passport number as an identifier.

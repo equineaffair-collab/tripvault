@@ -42,6 +42,7 @@ import {
   isEntryRequirementCheckAvailable,
   runEntryRequirementCheck,
 } from '../lib/entryRequirements';
+import ShareTripScreen from './ShareTripScreen';
 
 /**
  * F3 — one trip: who's going, what still needs organizing, and every booking.
@@ -64,6 +65,9 @@ export default function TripDetailScreen({
   const [newLabel, setNewLabel] = useState('');
   const [addingItem, setAddingItem] = useState(false);
   const [checkingEntry, setCheckingEntry] = useState(false);
+  // F9's second mechanism, on its own screen. Sharing a trip with an outsider
+  // is a different act from adding an attendee, and lives nowhere near it.
+  const [sharingOpen, setSharingOpen] = useState(false);
 
   const attendees = travelers.filter((t) => attendeeIds.includes(t.id));
 
@@ -210,6 +214,16 @@ export default function TripDetailScreen({
   const progress = checklistProgress(checklist);
   const grouped = shouldGroupChecklist(checklist);
 
+  if (sharingOpen) {
+    return (
+      <ShareTripScreen
+        tripId={trip.id}
+        tripName={trip.name}
+        onBack={() => setSharingOpen(false)}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -225,6 +239,10 @@ export default function TripDetailScreen({
             : 'Dates not set'}
         </Text>
         <Text style={styles.progress}>{progress.label}</Text>
+
+        <Pressable onPress={() => setSharingOpen(true)} hitSlop={8}>
+          <Text style={styles.shareLink}>Share this trip ›</Text>
+        </Pressable>
 
         {error && <Text style={styles.error}>{error}</Text>}
         {loading && <ActivityIndicator style={styles.spinner} />}
@@ -490,6 +508,7 @@ function BookingForm({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   scroll: { padding: 24, gap: 10, paddingBottom: 48 },
+  shareLink: { color: '#1B6EF3', fontSize: 15, fontWeight: '600', marginTop: 10 },
   back: { color: '#1B6EF3', fontSize: 15, fontWeight: '600' },
   heading: { fontSize: 22, fontWeight: '700', marginTop: 4 },
   meta: { fontSize: 14, color: '#666' },

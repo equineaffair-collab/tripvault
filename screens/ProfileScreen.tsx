@@ -20,8 +20,19 @@ import { RELATIONSHIP_LABELS, type Relationship, type Traveler } from '../types/
 import TravelerFormModal from './TravelerFormModal';
 import LoyaltyScreen from './LoyaltyScreen';
 import AccountScreen from './AccountScreen';
+import FamilyAccessScreen from './FamilyAccessScreen';
+import AcceptInviteScreen from './AcceptInviteScreen';
 
-export default function ProfileScreen() {
+type Props = {
+  /**
+   * F9: accepting an invite turns this account into a linked family member,
+   * which is a different app entirely. The navigator owns that decision, so
+   * this screen tells it to look again rather than deciding for itself.
+   */
+  onRoleMayHaveChanged?: () => void;
+};
+
+export default function ProfileScreen({ onRoleMayHaveChanged }: Props) {
   const { user, signOut } = useAuth();
   const [travelers, setTravelers] = useState<Traveler[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +42,10 @@ export default function ProfileScreen() {
   // numbers belong to a person, and the tab bar is already at three.
   const [loyaltyFor, setLoyaltyFor] = useState<Traveler | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  // F9's two sides, each on its own screen: granting someone else access, and
+  // redeeming a code someone gave you.
+  const [accessFor, setAccessFor] = useState<Traveler | null>(null);
+  const [acceptOpen, setAcceptOpen] = useState(false);
   const [editing, setEditing] = useState<Traveler | null>(null);
 
   const refresh = useCallback(async () => {
@@ -96,6 +111,31 @@ export default function ProfileScreen() {
 
   if (accountOpen) {
     return <AccountScreen onBack={() => setAccountOpen(false)} />;
+  }
+
+  if (accessFor) {
+    // Re-read from the refreshed list so the screen reflects a link that was
+    // just granted or removed, rather than the row captured when it opened.
+    const current = travelers.find((t) => t.id === accessFor.id) ?? accessFor;
+    return (
+      <FamilyAccessScreen
+        traveler={current}
+        onBack={() => setAccessFor(null)}
+        onChanged={refresh}
+      />
+    );
+  }
+
+  if (acceptOpen) {
+    return (
+      <AcceptInviteScreen
+        onBack={() => setAcceptOpen(false)}
+        onAccepted={() => {
+          setAcceptOpen(false);
+          onRoleMayHaveChanged?.();
+        }}
+      />
+    );
   }
 
   return (
@@ -164,6 +204,11 @@ export default function ProfileScreen() {
                 <Text style={styles.minorBadgeText}>Minor</Text>
               </View>
             )}
+            {item.linked_auth_user_id && (
+              <View style={styles.linkedBadge}>
+                <Text style={styles.linkedBadgeText}>Own login</Text>
+              </View>
+            )}
             <Pressable
               onPress={() => setLoyaltyFor(item)}
               hitSlop={10}
@@ -171,10 +216,16 @@ export default function ProfileScreen() {
             >
               <Text style={styles.loyaltyLinkText}>Loyalty ›</Text>
             </Pressable>
+            <Pressable onPress={() => setAccessFor(item)} hitSlop={10} style={styles.loyaltyLink}>
+              <Text style={styles.loyaltyLinkText}>Access ›</Text>
+            </Pressable>
           </Pressable>
         )}
         ListFooterComponent={
           <>
+          <Pressable style={styles.dataLink} onPress={() => setAcceptOpen(true)}>
+            <Text style={styles.dataLinkText}>Someone gave me an invite code</Text>
+          </Pressable>
           <Pressable style={styles.dataLink} onPress={() => setAccountOpen(true)}>
             <Text style={styles.dataLinkText}>Export or delete my data</Text>
           </Pressable>
@@ -197,6 +248,14 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+  linkedBadge: {
+    backgroundColor: '#E4F1E8',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  linkedBadgeText: { fontSize: 11, fontWeight: '700', color: '#1F5B33' },
   listContent: { padding: 24, gap: 8 },
   header: { gap: 16, marginBottom: 8 },
   block: { gap: 4 },

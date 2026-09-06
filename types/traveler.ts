@@ -17,7 +17,7 @@ export type Traveler = {
   relationship: Relationship;
   /** Server-derived from relationship; never written by the client. */
   is_minor: boolean;
-  /** F9, Phase 10. Null and unused for now. */
+  /** F9 — set when this profile has its own linked login (Phase 10). */
   linked_auth_user_id: string | null;
   created_at: string;
 };
